@@ -16,4 +16,4 @@ jobs:
       - name: Run Humidity Check
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python alerts/humidity_check.py
+        run: python humidity_check.py
