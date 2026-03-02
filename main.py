@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 import services, models, schemas
 from db import get_db, engine
 from sqlalchemy.orm import Session
@@ -7,9 +8,23 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-@app.post("/readings/", response_model=schemas.Reading)
-async def create_new_reading(reading: schemas.ReadingCreate, db: Session = Depends(get_db)):
-    return services.create_reading(db, reading)
+@app.post("/readings/")
+async def create_new_reading(reading: schemas.ReadingIncoming, db: Session = Depends(get_db)):
+    is_valid = (
+        (80000 <= reading.pressure <= 120000) and
+        (-10 <= reading.temperature <= 50) and
+        (0.0 <= reading.humidity <= 100.0)
+    )
+
+    if is_valid:
+        valid_reading = schemas.ReadingCreate(**reading.model_dump())
+        return services.create_reading(db, valid_reading)
+    else:
+        print(f"Silently dropped invalid data: {reading.model_dump()}")
+        return JSONResponse(
+            status_code=status.HTTP_200_OK, 
+            content={"detail": "Data received but filtered out due to out-of-bounds values."}
+        )
 
 @app.get("/readings/", response_model=list[schemas.Reading]) 
 async def get_all_readings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
