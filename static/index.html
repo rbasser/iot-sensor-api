@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Station Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; padding: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .big-number { font-size: 2.5em; font-weight: bold; color: #2c3e50; }
+    </style>
+</head>
+<body>
+    <h1>Real-time Sensor Data</h1>
+    
+    <div class="grid">
+        <div class="card">
+            <h3>Latest Temperature</h3>
+            <div id="latest-temp" class="big-number">-- °C</div>
+        </div>
+        <div class="card">
+            <h3>Latest Humidity</h3>
+            <div id="latest-hum" class="big-number">-- %</div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+        <h3>Last Hour: Temperature & Humidity</h3>
+        <canvas id="sensorChart"></canvas>
+    </div>
+
+    <script>
+        const API_BASE = "";
+
+        async function updateDashboard() {
+            // 1. Fetch Latest Reading 
+            const latestRes = await fetch(`${API_BASE}/readings/latest`);
+            const latest = await latestRes.json();
+            document.getElementById('latest-temp').innerText = `${latest.temperature.toFixed(1)}°C`;
+            document.getElementById('latest-hum').innerText = `${latest.humidity.toFixed(1)}%`;
+
+            // 2. Fetch History (from your /readings/ route)
+            [cite_start]// Note: Since you send every 30s, ~120 readings = 1 hour [cite: 1]
+            const historyRes = await fetch(`${API_BASE}/readings/?limit=120`);
+            const history = await historyRes.json();
+            
+            // Reverse so oldest is on the left
+            const data = history.reverse();
+            const labels = data.map(r => new Date(r.timestamp).toLocaleTimeString());
+            const temps = data.map(r => r.temperature);
+            const hums = data.map(r => r.humidity);
+
+            updateChart(labels, temps, hums);
+        }
+
+        let chart;
+        function updateChart(labels, temps, hums) {
+            const ctx = document.getElementById('sensorChart').getContext('2d');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        data: temps,
+                        borderColor: '#e74c3c',
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Humidity (%)',
+                        data: hums,
+                        borderColor: '#3498db',
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { type: 'linear', position: 'left' },
+                        y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+        }
+
+        // Refresh every 30 seconds to match Pico's upload rate
+        setInterval(updateDashboard, 30000);
+        updateDashboard();
+    </script>
+</body>
+</html>

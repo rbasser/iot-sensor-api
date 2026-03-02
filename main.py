@@ -2,6 +2,9 @@ import os
 from fastapi import FastAPI, Depends, HTTPException, status, Security
 from fastapi.responses import JSONResponse
 from fastapi.security.api_key import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import services, models, schemas
 from db import get_db, engine
 from sqlalchemy.orm import Session
@@ -13,6 +16,15 @@ app = FastAPI()
 
 API_KEY_SECRET = os.getenv("API_KEY", "my_super_secret_key")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allows any website to access your data
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 def get_api_key(api_key: str = Security(api_key_header)):
     if api_key == API_KEY_SECRET:
@@ -66,3 +78,7 @@ def get_reading_by_id(id: int, db: Session = Depends(get_db)):
     if reading:
         return reading
     raise HTTPException(status_code=404, detail="Reading Not Found")
+
+@app.get("/")
+async def read_index():
+    return FileResponse(os.path.join('static', 'index.html'))

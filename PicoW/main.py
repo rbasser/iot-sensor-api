@@ -136,7 +136,7 @@ while True:
         "reboot_flag": "rebooted" if just_rebooted else None
     }
     
-    print(f"Sending to Render -> Temp: {temperature:0.2f}C, Press: {pressure}Pa")
+    print(f"Sending to Render -> Temp: {temperature:0.1f}C, Humidity: {humidity: 0.1f} Press: {pressure}Pa")
     
     # 5. Simplified headers for FastAPI
     headers = {
@@ -163,3 +163,4 @@ while True:
 
     # 7. Wait for next cycle
     time.sleep(30)
+
