@@ -1,5 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+import os
+from fastapi import FastAPI, Depends, HTTPException, status, Security
 from fastapi.responses import JSONResponse
+from fastapi.security.api_key import APIKeyHeader
 import services, models, schemas
 from db import get_db, engine
 from sqlalchemy.orm import Session
@@ -8,7 +10,20 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-@app.post("/readings/")
+
+API_KEY_SECRET = os.getenv("API_KEY", "my_super_secret_key")
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
+
+def get_api_key(api_key: str = Security(api_key_header)):
+    if api_key == API_KEY_SECRET:
+        return api_key
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing API Key"
+    )
+
+
+@app.post("/readings/", dependencies=[Depends(get_api_key)])
 async def create_new_reading(reading: schemas.ReadingIncoming, db: Session = Depends(get_db)):
     is_valid = (
         (80000 <= reading.pressure <= 120000) and
@@ -25,6 +40,14 @@ async def create_new_reading(reading: schemas.ReadingIncoming, db: Session = Dep
             status_code=status.HTTP_200_OK, 
             content={"detail": "Data received but filtered out due to out-of-bounds values."}
         )
+        
+@app.delete("/readings/{id}", response_model=schemas.Reading, dependencies=[Depends(get_api_key)])
+def delete_reading_entry(id: int, db: Session = Depends(get_db)):
+    deleted_entry = services.delete_reading(db, id)
+    if deleted_entry:
+        return deleted_entry
+    raise HTTPException(status_code=404, detail="Failed to delete reading")
+
 
 @app.get("/readings/", response_model=list[schemas.Reading]) 
 async def get_all_readings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -43,10 +66,3 @@ def get_reading_by_id(id: int, db: Session = Depends(get_db)):
     if reading:
         return reading
     raise HTTPException(status_code=404, detail="Reading Not Found")
-
-@app.delete("/readings/{id}", response_model=schemas.Reading)
-def delete_reading_entry(id: int, db: Session = Depends(get_db)):
-    deleted_entry = services.delete_reading(db, id)
-    if deleted_entry:
-        return deleted_entry
-    raise HTTPException(status_code=404, detail="Failed to delete reading")
