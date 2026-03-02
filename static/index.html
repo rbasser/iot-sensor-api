@@ -33,58 +33,84 @@
         const API_BASE = "";
 
         async function updateDashboard() {
-            // 1. Fetch Latest Reading 
-            const latestRes = await fetch(`${API_BASE}/readings/latest`);
-            const latest = await latestRes.json();
-            document.getElementById('latest-temp').innerText = `${latest.temperature.toFixed(1)}°C`;
-            document.getElementById('latest-hum').innerText = `${latest.humidity.toFixed(1)}%`;
+            try {
+                // 1. Fetch Latest Reading for the big numbers
+                const latestRes = await fetch(`${API_BASE}/readings/latest`);
+                const latest = await latestRes.json();
+                document.getElementById('latest-temp').innerText = `${latest.temperature.toFixed(1)}°C`;
+                document.getElementById('latest-hum').innerText = `${latest.humidity.toFixed(1)}%`;
 
-            // 2. Fetch History (from your /readings/ route)
-            [cite_start]// Note: Since you send every 30s, ~120 readings = 1 hour [cite: 1]
-            const historyRes = await fetch(`${API_BASE}/readings/?limit=120`);
-            const history = await historyRes.json();
-            
-            // Reverse so oldest is on the left
-            const data = history.reverse();
-            const labels = data.map(r => new Date(r.timestamp).toLocaleTimeString());
-            const temps = data.map(r => r.temperature);
-            const hums = data.map(r => r.humidity);
+                // 2. Fetch History (Last 120 readings)
+                const historyRes = await fetch(`${API_BASE}/readings/?limit=120`);
+                const history = await historyRes.json();
+                
+                if (!history || history.length === 0) return;
 
-            updateChart(labels, temps, hums);
+                // 3. Prepare data: API returns newest first, so reverse for the chart
+                const data = history.slice().reverse(); 
+                
+                const labels = data.map(r => {
+                    const date = new Date(r.timestamp);
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                });
+                
+                const temps = data.map(r => r.temperature);
+                const hums = data.map(r => r.humidity);
+
+                updateChart(labels, temps, hums);
+            } catch (err) {
+                console.error("Dashboard update failed:", err);
+            }
         }
 
         let chart;
         function updateChart(labels, temps, hums) {
             const ctx = document.getElementById('sensorChart').getContext('2d');
-            if (chart) chart.destroy();
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Temperature (°C)',
-                        data: temps,
-                        borderColor: '#e74c3c',
-                        yAxisID: 'y'
-                    }, {
-                        label: 'Humidity (%)',
-                        data: hums,
-                        borderColor: '#3498db',
-                        yAxisID: 'y1'
-                    }]
-                },
-                options: {
-                    scales: {
-                        y: { type: 'linear', position: 'left' },
-                        y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } }
+            
+            if (chart) {
+                // Update existing chart data instead of destroying/recreating for smoother performance
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = temps;
+                chart.data.datasets[1].data = hums;
+                chart.update('none'); // Update without animation for a cleaner look
+            } else {
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Temperature (°C)',
+                            data: temps,
+                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            fill: true,
+                            tension: 0.3, // Smoothes the line
+                            yAxisID: 'y'
+                        }, {
+                            label: 'Humidity (%)',
+                            data: hums,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y1'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { type: 'linear', position: 'left', title: { display: true, text: 'Temp °C' } },
+                            y1: { type: 'linear', position: 'right', title: { display: true, text: 'Hum %' }, grid: { drawOnChartArea: false } }
+                        }
                     }
-                }
-            });
+                });
+            }
         }
 
-        // Refresh every 30 seconds to match Pico's upload rate
-        setInterval(updateDashboard, 30000);
+        // Initial load and set interval
         updateDashboard();
+        setInterval(updateDashboard, 30000);
     </script>
 </body>
 </html>
