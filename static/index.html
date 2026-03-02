@@ -11,11 +11,11 @@
         
         .chart-container { position: relative; height: 350px; width: 100%; }
         
-        /* Status Dot Styles */
         .status-container { display: flex; align-items: center; gap: 8px; font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px; }
         .dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; background-color: #bdc3c7; }
         .dot-online { background-color: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
         .dot-offline { background-color: #e74c3c; box-shadow: 0 0 8px #e74c3c; }
+        #last-updated { font-style: italic; color: #95a5a6; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
@@ -23,11 +23,12 @@
     </style>
 </head>
 <body>
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
         <h1>Real-time Sensor Data</h1>
         <div class="status-container">
             <span id="status-dot" class="dot"></span>
             <span id="status-text">Checking connection...</span>
+            <span id="last-updated"></span>
         </div>
     </div>
     
@@ -78,10 +79,8 @@
                 document.getElementById('latest-temp').innerText = `${latest.temperature.toFixed(1)}°C`;
                 document.getElementById('latest-hum').innerText = `${latest.humidity.toFixed(1)}%`;
 
-                // Update Status Dot
                 updateStatusIndicator(latest.timestamp);
 
-                // 2. Fetch History (Chart Data)
                 const historyRes = await fetch(`${API_BASE}/readings/?limit=120`);
                 const history = await historyRes.json();
                 
@@ -93,7 +92,6 @@
                     updateChart(labels, temps, hums);
                 }
 
-                // 3. Fetch Weekly Summary
                 updateWeeklySummary();
 
             } catch (err) {
@@ -106,17 +104,30 @@
         function updateStatusIndicator(timestamp) {
             const lastSeen = new Date(timestamp);
             const now = new Date();
-            const diffMinutes = (now - lastSeen) / 1000 / 60;
+            const diffSeconds = Math.floor((now - lastSeen) / 1000);
+            const diffMinutes = Math.floor(diffSeconds / 60);
 
             const dot = document.getElementById('status-dot');
             const text = document.getElementById('status-text');
+            const lastUpdated = document.getElementById('last-updated');
 
             if (diffMinutes < 2) {
                 dot.className = "dot dot-online";
                 text.innerText = "Pico Online";
             } else {
                 dot.className = "dot dot-offline";
-                text.innerText = `Last seen ${Math.floor(diffMinutes)}m ago`;
+                text.innerText = "Pico Offline";
+            }
+
+            if (diffSeconds < 60) {
+                lastUpdated.innerText = "(received within the last minute)";
+            } else if (diffMinutes === 1) {
+                lastUpdated.innerText = "(received 1 minute ago)";
+            } else if (diffMinutes < 60) {
+                lastUpdated.innerText = `(received ${diffMinutes} minutes ago)`;
+            } else {
+                const diffHours = Math.floor(diffMinutes / 60);
+                lastUpdated.innerText = `(received ${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago)`;
             }
         }
 
@@ -127,8 +138,8 @@
                 const summaries = await res.json();
                 
                 const body = document.getElementById('summary-body');
-                if (summaries.length === 0) {
-                    body.innerHTML = "<tr><td colspan='4'>No daily summaries found. Cron job may not have run yet.</td></tr>";
+                if (!summaries || summaries.length === 0) {
+                    body.innerHTML = "<tr><td colspan='4'>Waiting for daily cron job to run...</td></tr>";
                     return;
                 }
 
@@ -183,14 +194,18 @@
                         scales: {
                             y: { type: 'linear', position: 'left', title: { display: true, text: 'Temp °C' } },
                             y1: { type: 'linear', position: 'right', title: { display: true, text: 'Hum %' }, grid: { drawOnChartArea: false } }
-                        }
+                        },
+                        interaction: {
+                            intersect: false,
+                            mode: 'index',
+                        },
                     }
                 });
             }
         }
         
         updateDashboard();
-        setInterval(updateDashboard, 30000); // Syncs with Pico's 30s interval
+        setInterval(updateDashboard, 30000); 
     </script>
 </body>
 </html>
