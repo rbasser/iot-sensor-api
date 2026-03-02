@@ -1,4 +1,8 @@
 import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 from sqlalchemy.orm import Session
 from db import SessionLocal
 from models import SensorReading, DailySummary # Assuming you added DailySummary to models.py
