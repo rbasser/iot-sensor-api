@@ -6,12 +6,30 @@
     <style>
         body { font-family: sans-serif; background: #f4f4f9; padding: 20px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px;}
         .big-number { font-size: 2.5em; font-weight: bold; color: #2c3e50; }
+        
+        .chart-container { position: relative; height: 350px; width: 100%; }
+        
+        /* Status Dot Styles */
+        .status-container { display: flex; align-items: center; gap: 8px; font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px; }
+        .dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; background-color: #bdc3c7; }
+        .dot-online { background-color: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+        .dot-offline { background-color: #e74c3c; box-shadow: 0 0 8px #e74c3c; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { color: #7f8c8d; font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; }
     </style>
 </head>
 <body>
-    <h1>Real-time Sensor Data</h1>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h1>Real-time Sensor Data</h1>
+        <div class="status-container">
+            <span id="status-dot" class="dot"></span>
+            <span id="status-text">Checking connection...</span>
+        </div>
+    </div>
     
     <div class="grid">
         <div class="card">
@@ -24,9 +42,28 @@
         </div>
     </div>
 
-    <div class="card" style="margin-top: 20px;">
+    <div class="card">
         <h3>Last Hour: Temperature & Humidity</h3>
-        <canvas id="sensorChart"></canvas>
+        <div class="chart-container">
+            <canvas id="sensorChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Weekly Insights (Daily Averages)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Avg Temp</th>
+                    <th>Avg Hum</th>
+                    <th>Reboots</th>
+                </tr>
+            </thead>
+            <tbody id="summary-body">
+                <tr><td colspan="4">Loading historical data...</td></tr>
+            </tbody>
+        </table>
     </div>
 
     <script>
@@ -34,32 +71,77 @@
 
         async function updateDashboard() {
             try {
-                // 1. Fetch Latest Reading for the big numbers
+                // 1. Fetch Latest Reading
                 const latestRes = await fetch(`${API_BASE}/readings/latest`);
                 const latest = await latestRes.json();
+                
                 document.getElementById('latest-temp').innerText = `${latest.temperature.toFixed(1)}°C`;
                 document.getElementById('latest-hum').innerText = `${latest.humidity.toFixed(1)}%`;
 
-                // 2. Fetch History (Last 120 readings)
+                // Update Status Dot
+                updateStatusIndicator(latest.timestamp);
+
+                // 2. Fetch History (Chart Data)
                 const historyRes = await fetch(`${API_BASE}/readings/?limit=120`);
                 const history = await historyRes.json();
                 
-                if (!history || history.length === 0) return;
+                if (history && history.length > 0) {
+                    const data = history.slice().reverse(); 
+                    const labels = data.map(r => new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                    const temps = data.map(r => r.temperature);
+                    const hums = data.map(r => r.humidity);
+                    updateChart(labels, temps, hums);
+                }
 
-                // 3. Prepare data: API returns newest first, so reverse for the chart
-                const data = history.slice().reverse(); 
-                
-                const labels = data.map(r => {
-                    const date = new Date(r.timestamp);
-                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                });
-                
-                const temps = data.map(r => r.temperature);
-                const hums = data.map(r => r.humidity);
+                // 3. Fetch Weekly Summary
+                updateWeeklySummary();
 
-                updateChart(labels, temps, hums);
             } catch (err) {
                 console.error("Dashboard update failed:", err);
+                document.getElementById('status-dot').className = "dot dot-offline";
+                document.getElementById('status-text').innerText = "API Offline";
+            }
+        }
+
+        function updateStatusIndicator(timestamp) {
+            const lastSeen = new Date(timestamp);
+            const now = new Date();
+            const diffMinutes = (now - lastSeen) / 1000 / 60;
+
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+
+            if (diffMinutes < 2) {
+                dot.className = "dot dot-online";
+                text.innerText = "Pico Online";
+            } else {
+                dot.className = "dot dot-offline";
+                text.innerText = `Last seen ${Math.floor(diffMinutes)}m ago`;
+            }
+        }
+
+        async function updateWeeklySummary() {
+            try {
+                const res = await fetch(`${API_BASE}/summaries/`);
+                if (!res.ok) return;
+                const summaries = await res.json();
+                
+                const body = document.getElementById('summary-body');
+                if (summaries.length === 0) {
+                    body.innerHTML = "<tr><td colspan='4'>No daily summaries found. Cron job may not have run yet.</td></tr>";
+                    return;
+                }
+
+                body.innerHTML = summaries.map(day => `
+                    <tr>
+                        <td>${new Date(day.date).toLocaleDateString()}</td>
+                        <td>${day.avg_temp.toFixed(1)}°C</td>
+                        <td>${day.avg_humidity.toFixed(1)}%</td>
+                        <td>${day.reboot_count}</td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error("Summary fetch failed:", err);
             }
         }
 
@@ -68,11 +150,10 @@
             const ctx = document.getElementById('sensorChart').getContext('2d');
             
             if (chart) {
-                // Update existing chart data instead of destroying/recreating for smoother performance
                 chart.data.labels = labels;
                 chart.data.datasets[0].data = temps;
                 chart.data.datasets[1].data = hums;
-                chart.update('none'); // Update without animation for a cleaner look
+                chart.update('none'); 
             } else {
                 chart = new Chart(ctx, {
                     type: 'line',
@@ -84,7 +165,7 @@
                             borderColor: '#e74c3c',
                             backgroundColor: 'rgba(231, 76, 60, 0.1)',
                             fill: true,
-                            tension: 0.3, // Smoothes the line
+                            tension: 0.3,
                             yAxisID: 'y'
                         }, {
                             label: 'Humidity (%)',
@@ -98,7 +179,7 @@
                     },
                     options: {
                         responsive: true,
-                        maintainAspectRatio: false,
+                        maintainAspectRatio: false, 
                         scales: {
                             y: { type: 'linear', position: 'left', title: { display: true, text: 'Temp °C' } },
                             y1: { type: 'linear', position: 'right', title: { display: true, text: 'Hum %' }, grid: { drawOnChartArea: false } }
@@ -107,10 +188,9 @@
                 });
             }
         }
-
-        // Initial load and set interval
+        
         updateDashboard();
-        setInterval(updateDashboard, 30000);
+        setInterval(updateDashboard, 30000); // Syncs with Pico's 30s interval
     </script>
 </body>
 </html>

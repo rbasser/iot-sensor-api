@@ -2,7 +2,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 
-# 1. New relaxed schema to catch all data without throwing 422 errors
 class ReadingIncoming(BaseModel):
     pressure: int
     temperature: float
@@ -10,7 +9,6 @@ class ReadingIncoming(BaseModel):
     gas_resistance: Optional[int] = None
     reboot_flag: Optional[str] = None
 
-# 2. Original strict schema for database validation
 class ReadingBase(BaseModel):
     pressure: int = Field(..., ge=80000, le=120000) 
     temperature: float = Field(..., ge=-10, le=50) 
@@ -25,4 +23,13 @@ class Reading(ReadingBase):
     id: int
     timestamp: datetime
     
+    model_config = ConfigDict(from_attributes=True)
+    
+    
+class DailySummary(BaseModel):
+    date: datetime
+    avg_temp: float
+    avg_humidity: float
+    reboot_count: int
+
     model_config = ConfigDict(from_attributes=True)

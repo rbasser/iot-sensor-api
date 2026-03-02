@@ -82,3 +82,7 @@ def get_reading_by_id(id: int, db: Session = Depends(get_db)):
 @app.get("/")
 async def read_index():
     return FileResponse(os.path.join('static', 'index.html'))
+
+@app.get("/summaries/", response_model=list[schemas.DailySummary])
+def get_daily_summaries(db: Session = Depends(get_db)):
+    return db.query(models.DailySummary).order_by(models.DailySummary.date.desc()).limit(7).all()
