@@ -2,11 +2,11 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 psycopg2-binary
-python-dotenv
-python-multipart
+dotenv
+multipart
 requests
 pytest
 httpx
 pytest-playwright
 schedule
-dotenv
+alembic
