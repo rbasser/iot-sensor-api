@@ -7,7 +7,9 @@ from alembic import context
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
-from DETAILS import EXT_DB_URL as SQLALCHEMY_DATABASE_URL
+
+from db import Base, SQLALCHEMY_DATABASE_URL
+import models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -18,8 +20,6 @@ config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from db import Base
-import models
 
 # add your model's MetaData object here
 # for 'autogenerate' support
