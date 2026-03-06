@@ -24,4 +24,4 @@ jobs:
       - name: Run Aggregation Script
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python cron_job.py
+        run: python daily_sync.py

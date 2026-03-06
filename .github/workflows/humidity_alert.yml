@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: '3.10'
       - run: pip install sqlalchemy psycopg2-binary
-      - name: Run Humidity Check
+      - name: Hourly humidity alert check
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python humidity_check.py

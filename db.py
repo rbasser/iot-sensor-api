@@ -4,14 +4,8 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Fetch the URL from environment variables, fallback to local for testing
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
-
-# Render uses 'postgres://' but SQLAlchemy requires 'postgresql://'
-if not SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
-    if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
-    else:
-        raise ValueError("Invalid DATABASE_URL format. Must start with 'postgres://' or 'postgresql://'.")
-
+if not SQLALCHEMY_DATABASE_URL:
+    from DETAILS import DB_URL as SQLALCHEMY_DATABASE_URL
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
