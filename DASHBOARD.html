@@ -68,10 +68,11 @@
     </div>
 
     <script>
-        const API_BASE = "";
+        const API_BASE = "https://iot-ingestion-api.onrender.com";
 
         async function updateDashboard() {
             try {
+                // 1. Fetch Latest Reading
                 const latestRes = await fetch(`${API_BASE}/readings/latest`);
                 const latest = await latestRes.json();
                 
@@ -85,32 +86,12 @@
                 
                 if (history && history.length > 0) {
                     const data = history.slice().reverse(); 
-                    
-                    const labels = [];
-                    const temps = [];
-                    const hums = [];
-
-                    for (let i = 0; i < data.length; i++) {
-                        labels.push(new Date(data[i].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-                        temps.push(data[i].temperature);
-                        hums.push(data[i].humidity);
-
-                        if (i < data.length - 1) {
-                            const currentTime = new Date(data[i].timestamp).getTime();
-                            const nextTime = new Date(data[i+1].timestamp).getTime();
-                            
-                            const diffMinutes = (nextTime - currentTime) / (1000 * 60);
-
-                            if (diffMinutes > 2) {
-                                labels.push(new Date(currentTime + 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-                                temps.push(null); 
-                                hums.push(null);
-                            }
-                        }
-                    }
-
+                    const labels = data.map(r => new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                    const temps = data.map(r => r.temperature);
+                    const hums = data.map(r => r.humidity);
                     updateChart(labels, temps, hums);
                 }
+
                 updateWeeklySummary();
 
             } catch (err) {

@@ -1,7 +1,12 @@
 fastapi
-uvicorn
-SQLAlchemy
+uvicorn[standard]
+sqlalchemy
 psycopg2-binary
-pydantic
-aiofiles
-alembic
+python-dotenv
+python-multipart
+requests
+pytest
+httpx
+pytest-playwright
+schedule
+dotenv
