@@ -9,8 +9,6 @@ import services, models, schemas
 from db import get_db, engine
 from sqlalchemy.orm import Session
 
-models.Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 
 
