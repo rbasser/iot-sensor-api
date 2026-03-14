@@ -3,12 +3,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 
-# Fetch the URL from environment variables if on render (using internal link), fetching external link locally otherwise
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("EXT_DB_URL")
 if SQLALCHEMY_DATABASE_URL:
     engine = create_engine(SQLALCHEMY_DATABASE_URL)
 else:
-    # No URL set — tests will override this with their own engine
     engine = None
 
 if engine:
