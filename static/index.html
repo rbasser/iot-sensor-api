@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sensor Data Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -201,6 +202,27 @@
             border-radius: 2px;
         }
 
+        .btn-window {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 12px;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+        }
+        .btn-window { display: none; }
+        .btn-window.visible { display: inline-block; }
+        .btn-window:hover { border-color: var(--text); color: var(--text); }
+        .btn-window.active {
+            background: var(--text);
+            border-color: var(--text);
+            color: var(--surface);
+        }
+
         .chart-wrap {
             position: relative;
             height: 280px;
@@ -310,16 +332,19 @@
 
 <div class="chart-card">
     <div class="card-header">
-        <span class="card-title">Last 60 minutes</span>
-        <div class="legend">
-            <div class="legend-item">
-                <div class="legend-line" style="background: var(--temp)"></div>
-                Temp °C
+        <span class="card-title" id="chart-title">Last 60 minutes</span>
+        <div style="display:flex; align-items:center; gap:16px;">
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-line" style="background: var(--temp)"></div>
+                    Temp °C
+                </div>
+                <div class="legend-item">
+                    <div class="legend-line" style="background: var(--hum)"></div>
+                    Hum %
+                </div>
             </div>
-            <div class="legend-item">
-                <div class="legend-line" style="background: var(--hum)"></div>
-                Hum %
-            </div>
+            <button class="btn-window" id="btn-window">show most recent</button>
         </div>
     </div>
     <div class="chart-wrap">
@@ -351,6 +376,17 @@
 <script>
     const API_BASE = "https://iot-ingestion-api.onrender.com";
 
+    // ── Window toggle — false = rolling last hour, true = most recent data ──
+    let showMostRecent = false;
+    const btnWindow = document.getElementById('btn-window');
+    btnWindow.addEventListener('click', () => {
+        showMostRecent = !showMostRecent;
+        btnWindow.classList.toggle('active', showMostRecent);
+        btnWindow.innerText = showMostRecent ? 'show last hour' : 'show most recent';
+        document.getElementById('chart-title').innerText = showMostRecent ? 'Most recent data' : 'Last 60 minutes';
+        updateChart();
+    });
+
     // ── Status indicator ──────────────────────────────────────────
     function updateStatus(timestamp) {
         const diff = Math.floor((Date.now() - new Date(timestamp)) / 1000);
@@ -370,18 +406,63 @@
 
     // ── Chart ─────────────────────────────────────────────────────
     let chart;
+    let cachedHistory = [];
 
-    function buildChart(labels, temps, hums) {
-        const ctx    = document.getElementById('sensorChart').getContext('2d');
-        const noData = document.getElementById('no-data-msg');
+    // Convert readings into {x: Date, y: value} point arrays.
+    // Inserts a null point into gaps > 2 min so spanGaps:false draws a break.
+    function buildSeries(readings) {
+        const sorted = readings.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const temps = [], hums = [];
+        for (let i = 0; i < sorted.length; i++) {
+            const t = new Date(sorted[i].timestamp);
+            temps.push({ x: t, y: sorted[i].temperature });
+            hums.push({  x: t, y: sorted[i].humidity });
+            if (i < sorted.length - 1) {
+                const gap = (new Date(sorted[i+1].timestamp) - t) / 60000;
+                if (gap > 2) {
+                    const mid = new Date(t.getTime() + gap * 30000);
+                    temps.push({ x: mid, y: null });
+                    hums.push({  x: mid, y: null });
+                }
+            }
+        }
+        return { temps, hums };
+    }
 
-        if (!labels.length) {
-            noData.style.display = 'flex';
-            if (chart) { chart.destroy(); chart = null; }
-            return;
+    // Decide the x-axis min/max and which readings to show.
+    function updateChart() {
+        const now = Date.now();
+        let xMin, xMax, filtered;
+
+        if (showMostRecent) {
+            // Anchor to the newest reading, show 60 min ending there.
+            // Right half blank if Pico went offline mid-window.
+            if (cachedHistory.length === 0) {
+                filtered = [];
+                xMin = new Date(now - 60 * 60 * 1000);
+                xMax = new Date(now);
+            } else {
+                const newest = Math.max(...cachedHistory.map(r => new Date(r.timestamp).getTime()));
+                xMax = new Date(newest);
+                xMin = new Date(newest - 60 * 60 * 1000);
+                filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
+            }
+        } else {
+            // Rolling mode: always show last 60 min anchored to now.
+            xMin = new Date(now - 60 * 60 * 1000);
+            xMax = new Date(now);
+            filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
         }
 
+        renderChart(filtered, xMin, xMax);
+    }
+
+    function renderChart(readings, xMin, xMax) {
+        const ctx    = document.getElementById('sensorChart').getContext('2d');
+        const noData = document.getElementById('no-data-msg');
         noData.style.display = 'none';
+
+        const { temps, hums } = buildSeries(readings);
 
         const base = {
             fill: true,
@@ -393,9 +474,10 @@
         };
 
         if (chart) {
-            chart.data.labels           = labels;
             chart.data.datasets[0].data = temps;
             chart.data.datasets[1].data = hums;
+            chart.options.scales.x.min  = xMin;
+            chart.options.scales.x.max  = xMax;
             chart.update('none');
             return;
         }
@@ -403,7 +485,6 @@
         chart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels,
                 datasets: [
                     { ...base, label: 'Temperature (°C)', data: temps, borderColor: '#d94f3d', backgroundColor: 'rgba(217,79,61,0.06)', yAxisID: 'y'  },
                     { ...base, label: 'Humidity (%)',      data: hums,  borderColor: '#3b82c4', backgroundColor: 'rgba(59,130,196,0.06)', yAxisID: 'y1' }
@@ -425,6 +506,11 @@
                         bodyFont:  { family: 'DM Mono', size: 12 },
                         padding: 10,
                         callbacks: {
+                            title: items => {
+                                if (!items.length) return '';
+                                const d = new Date(items[0].parsed.x);
+                                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            },
                             label: ctx => {
                                 const unit = ctx.datasetIndex === 0 ? '°C' : '%';
                                 return ` ${ctx.parsed.y !== null ? ctx.parsed.y.toFixed(1) : '—'}${unit}`;
@@ -434,13 +520,21 @@
                 },
                 scales: {
                     x: {
+                        type: 'time',
+                        min: xMin,
+                        max: xMax,
+                        time: {
+                            unit: 'minute',
+                            stepSize: 10,
+                            displayFormats: { minute: 'HH:mm' }
+                        },
                         grid: { color: '#f0f0ec' },
                         border: { display: false },
-                        ticks: { 
-                            color: '#888880', 
-                            font: { family: 'DM Mono', size: 10 }, 
+                        ticks: {
+                            color: '#888880',
+                            font: { family: 'DM Mono', size: 10 },
                             maxRotation: 0,
-                            maxTicksLimit: 7
+                            autoSkip: false,
                         }
                     },
                     y: {
@@ -476,6 +570,49 @@
         });
     }
 
+        // ── Main update ───────────────────────────────────────────────
+    async function update() {
+        try {
+            const latestRes = await fetch(`${API_BASE}/readings/latest`);
+            const latest    = await latestRes.json();
+
+            document.getElementById('latest-temp').innerText = `${latest.temperature.toFixed(1)}°C`;
+            document.getElementById('latest-hum').innerText  = `${latest.humidity.toFixed(1)}%`;
+            updateStatus(latest.timestamp);
+
+            // Fetch 2 hours so "most recent" mode has data to show even after an outage
+            const histRes = await fetch(`${API_BASE}/readings/history?hours=2`);
+            cachedHistory = await histRes.json();
+
+            updateChart();
+
+        } catch (err) {
+            console.error('Update failed:', err);
+            document.getElementById('status-dot').className = 'status-dot offline';
+            document.getElementById('status-text').innerText = 'api offline';
+        }
+    }
+
+    async function loadOneHourAgo() {
+        const agoTemp = document.getElementById('ago-temp');
+        const agoHum  = document.getElementById('ago-hum');
+        try {
+            const res = await fetch(`${API_BASE}/readings/at-offset`);
+            if (res.status === 404) {
+                agoTemp.innerText = '—';
+                agoHum.innerText  = '—';
+                return;
+            }
+            const data = await res.json();
+            agoTemp.innerText = `${data.temperature.toFixed(1)}°C`;
+            agoHum.innerText  = `${data.humidity.toFixed(1)}%`;
+        } catch (e) {
+            agoTemp.innerText = '—';
+            agoHum.innerText  = '—';
+            console.error('1h ago fetch failed:', e);
+        }
+    }
+
     // ── Weekly summary ────────────────────────────────────────────
     async function loadSummary() {
         try {
@@ -507,66 +644,12 @@
         }
     }
 
-    // ── Main update ───────────────────────────────────────────────
-    async function update() {
-        try {
-            const latestRes = await fetch(`${API_BASE}/readings/latest`);
-            const latest    = await latestRes.json();
-
-            document.getElementById('latest-temp').innerText = `${latest.temperature.toFixed(1)}°C`;
-            document.getElementById('latest-hum').innerText  = `${latest.humidity.toFixed(1)}%`;
-            updateStatus(latest.timestamp);
-
-            // Hard server-side 1-hour cutoff
-            const histRes = await fetch(`${API_BASE}/readings/history?hours=1`);
-            const history = await histRes.json();
-
-            const labels = [], temps = [], hums = [];
-
-            if (history && history.length > 0) {
-                const data = history.slice().reverse();
-
-                for (let i = 0; i < data.length; i++) {
-                    labels.push(new Date(data[i].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-                    temps.push(data[i].temperature);
-                    hums.push(data[i].humidity);
-
-                    // Null gap for outages > 2 min
-                    if (i < data.length - 1) {
-                        const gap = (new Date(data[i + 1].timestamp) - new Date(data[i].timestamp)) / 60000;
-                        if (gap > 2) { labels.push(''); temps.push(null); hums.push(null); }
-                    }
-                }
-            }
-
-            buildChart(labels, temps, hums);
-
-        } catch (err) {
-            console.error('Update failed:', err);
-            document.getElementById('status-dot').className = 'status-dot offline';
-            document.getElementById('status-text').innerText = 'api offline';
+    // Press 'd' to reveal/hide the debug button
+    document.addEventListener('keydown', e => {
+        if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            btnWindow.classList.toggle('visible');
         }
-    }
-
-    async function loadOneHourAgo() {
-        const agoTemp = document.getElementById('ago-temp');
-        const agoHum  = document.getElementById('ago-hum');
-        try {
-            const res = await fetch(`${API_BASE}/readings/at-offset`);
-            if (res.status === 404) {
-                agoTemp.innerText = '—';
-                agoHum.innerText  = '—';
-                return;
-            }
-            const data = await res.json();
-            agoTemp.innerText = `${data.temperature.toFixed(1)}°C`;
-            agoHum.innerText  = `${data.humidity.toFixed(1)}%`;
-        } catch (e) {
-            agoTemp.innerText = '—';
-            agoHum.innerText  = '—';
-            console.error('1h ago fetch failed:', e);
-        }
-    }
+    });
 
     update();
     loadSummary();
