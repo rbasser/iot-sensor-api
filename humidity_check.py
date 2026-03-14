@@ -4,7 +4,6 @@ import json
 import urllib.request
 from urllib.error import URLError
 
-API_URL = os.environ.get("API_URL")
 if not API_URL:
     print("Error: API_URL environment variable is missing.")
     sys.exit(1)

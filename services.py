@@ -1,3 +1,5 @@
+from sqlalchemy import func
+
 from models import SensorReading
 from sqlalchemy.orm import Session
 from schemas import ReadingCreate
@@ -23,6 +25,19 @@ def get_latest_reading(db: Session):
 def get_readings_since(db: Session, hours: int = 1):
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     return db.query(SensorReading).filter(SensorReading.timestamp >= cutoff).order_by(SensorReading.timestamp.desc()).all()
+
+def get_reading_at_offset(db: Session, minutes_ago: int = 60, window_minutes: int = 3):
+    target = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+    window = timedelta(minutes=window_minutes)
+    return db.query(SensorReading).filter(
+        SensorReading.timestamp >= target - window,
+        SensorReading.timestamp <= target + window
+    ).order_by(
+        func.abs(
+            func.extract('epoch', SensorReading.timestamp) -
+            func.extract('epoch', target)
+        )
+    ).first()
 
 def delete_reading(db: Session, id: int):
     reading_queryset = db.query(SensorReading).filter(SensorReading.id == id).first()

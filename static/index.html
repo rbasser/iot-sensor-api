@@ -548,12 +548,11 @@
         }
     }
 
-    // ── 1 hour ago ───────────────────────────────────────────────
     async function loadOneHourAgo() {
         const agoTemp = document.getElementById('ago-temp');
         const agoHum  = document.getElementById('ago-hum');
         try {
-            const res = await fetch(`${API_BASE}/readings/hour-ago`);
+            const res = await fetch(`${API_BASE}/readings/at-offset`);
             if (res.status === 404) {
                 agoTemp.innerText = '—';
                 agoHum.innerText  = '—';
