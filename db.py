@@ -3,7 +3,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("EXT_DB_URL")
+#RENDER SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("EXT_DB_URL")
+SQLALCHEMY_DATABASE_URL = os.getenv("NEON_DB_URL")
 if SQLALCHEMY_DATABASE_URL:
     engine = create_engine(SQLALCHEMY_DATABASE_URL)
 else:
