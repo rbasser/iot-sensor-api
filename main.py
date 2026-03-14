@@ -59,6 +59,16 @@ def get_latest_sensor_reading(db: Session = Depends(get_db)):
 def get_reading_history(hours: int = 1, db: Session = Depends(get_db)):
     return services.get_readings_since(db, hours=hours)
 
+def get_reading_one_hour_ago(db: Session):
+    target = datetime.now(timezone.utc) - timedelta(hours=1)
+    window = timedelta(minutes=5)
+    return db.query(models.SensorReading).filter(
+        models.SensorReading.timestamp >= target - window,
+        models.SensorReading.timestamp <= target + window
+    ).order_by(
+        func.abs(func.extract('epoch', models.SensorReading.timestamp) - func.extract('epoch', target))
+    ).first()
+
 @app.get("/readings/{id}", response_model=schemas.Reading)
 def get_reading_by_id(id: int, db: Session = Depends(get_db)):
     reading = services.get_reading(db, id)
