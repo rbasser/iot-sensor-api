@@ -1,6 +1,7 @@
 from models import SensorReading
 from sqlalchemy.orm import Session
 from schemas import ReadingCreate
+from datetime import datetime, timedelta, timezone
 
 def create_reading(db: Session, data: ReadingCreate):
     reading_instance = SensorReading(**data.model_dump())
@@ -18,6 +19,10 @@ def get_reading(db: Session, reading_id: int):
 
 def get_latest_reading(db: Session):
     return db.query(SensorReading).order_by(SensorReading.timestamp.desc()).first()
+
+def get_readings_since(db: Session, hours: int = 1):
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    return db.query(SensorReading).filter(SensorReading.timestamp >= cutoff).order_by(SensorReading.timestamp.desc()).all()
 
 def delete_reading(db: Session, id: int):
     reading_queryset = db.query(SensorReading).filter(SensorReading.id == id).first()

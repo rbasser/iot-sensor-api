@@ -1,5 +1,5 @@
 from db import Base
-from sqlalchemy import Integer, Column, Float, String, DateTime
+from sqlalchemy import Date, Integer, Column, Float, String, DateTime
 from sqlalchemy.sql import func
 
 class SensorReading(Base):
@@ -16,9 +16,9 @@ class SensorReading(Base):
     
 class DailySummary(Base):
     __tablename__ = "daily_summaries"
-    id = Column(Integer, primary_key=True)
-    date = Column(DateTime, unique=True, index=True)
-    avg_temp = Column(Float)
+    id           = Column(Integer, primary_key=True)
+    date         = Column(Date, unique=True, index=True)  # Date not DateTime
+    avg_temp     = Column(Float)
     avg_humidity = Column(Float)
     avg_pressure = Column(Integer)
     reboot_count = Column(Integer)

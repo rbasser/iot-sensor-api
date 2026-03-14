@@ -1,7 +1,8 @@
-DETAILS.py
+alembic.ini
+.env
+*.db
 __pycache__/
 *.pyc
-.env
 PicoW/personalDetails.py    
 alembic/README
 apply_*.py

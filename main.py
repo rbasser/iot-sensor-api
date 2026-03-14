@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 import services, models, schemas
 from db import get_db, engine
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 
 app = FastAPI()
@@ -55,6 +55,10 @@ def get_latest_sensor_reading(db: Session = Depends(get_db)):
         return reading
     raise HTTPException(status_code=404, detail="No readings found")
 
+@app.get("/readings/history", response_model=list[schemas.Reading])
+def get_reading_history(hours: int = 1, db: Session = Depends(get_db)):
+    return services.get_readings_since(db, hours=hours)
+
 @app.get("/readings/{id}", response_model=schemas.Reading)
 def get_reading_by_id(id: int, db: Session = Depends(get_db)):
     reading = services.get_reading(db, id)
@@ -98,7 +102,7 @@ async def trigger_daily_sync(db: Session = Depends(get_db)):
     Requires the X-API-Key header.
     """
     try:
-        yesterday = (datetime.now() - timedelta(days=1)).date()
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
         print(f"Starting aggregation for: {yesterday}")
 
         time_bounds = db.query(

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 
 class ReadingIncoming(BaseModel):
     pressure: int
@@ -27,7 +27,7 @@ class Reading(ReadingBase):
     
     
 class DailySummary(BaseModel):
-    date: datetime
+    date: date
     avg_temp: float
     avg_humidity: float
     reboot_count: int
