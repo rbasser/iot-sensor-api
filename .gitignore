@@ -4,12 +4,4 @@ __pycache__/
 *.pyc
 PicoW/personalDetails.py    
 alembic/README
-apply_*.py
-remove_spikes.py
-export_csv.py
-compare_sensors.py
-temperature_*.py
-sensor_comparison_chart.png
-combined_comparison.csv
-sensor_data_export.csv
-switchbot_data.csv
+python_functions

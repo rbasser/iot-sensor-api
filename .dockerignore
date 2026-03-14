@@ -7,16 +7,8 @@ __pycache__
 .gitignore
 venv
 .env.*
-DETAILS.py
 *.md
 PicoW/
-alembic/          # migrations - only needed to run manually
-tests/            # not needed in production image
 *.csv
 *.png
-apply_*.py
-remove_spikes.py
-export_csv.py
-compare_sensors.py
-README.md
-.env
+python_functions

@@ -5,14 +5,22 @@ from dotenv import load_dotenv
 
 # Fetch the URL from environment variables if on render (using internal link), fetching external link locally otherwise
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("EXT_DB_URL")
-if not SQLALCHEMY_DATABASE_URL:
-    raise RuntimeError("No database URL found. Set DATABASE_URL or EXT_DB_URL.")
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+if SQLALCHEMY_DATABASE_URL:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+else:
+    # No URL set — tests will override this with their own engine
+    engine = None
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+if engine:
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+else:
+    SessionLocal = None
+    
 Base = declarative_base()
 
 def get_db():
+    if SessionLocal is None:
+        raise RuntimeError("No database URL found. Set DATABASE_URL or EXT_DB_URL.")
     db = SessionLocal()
     try:
         yield db
@@ -20,4 +28,6 @@ def get_db():
         db.close()
 
 def create_table():
+    if engine is None:
+        raise RuntimeError("No database URL found. Set DATABASE_URL or EXT_DB_URL.")
     Base.metadata.create_all(bind=engine)
