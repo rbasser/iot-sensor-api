@@ -88,7 +88,7 @@ class TestPicoSession:
         """
         Simulates a realistic Pico W posting sequence end-to-end:
 
-          1. Boot reading — includes reboot_flag="rebooted"
+          1. Boot reading — includes reboot_flag=True
           2. Five steady readings — no reboot flag, slight temperature ramp
           3. /readings/latest confirms the last posted value
           4. Total count is correct (1 boot + 5 steady = 6)
@@ -103,10 +103,10 @@ class TestPicoSession:
             "temperature": 21.0,
             "humidity":    54.0,
             "pressure":    101000,
-            "reboot_flag": "rebooted",
+            "reboot_flag": True,
         }, headers=auth_headers)
         assert boot.status_code == 200
-        assert boot.json()["reboot_flag"] == "rebooted"
+        assert boot.json()["reboot_flag"] == True
 
         # 2. Steady readings
         last_payload = None

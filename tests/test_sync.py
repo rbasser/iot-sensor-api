@@ -24,7 +24,7 @@ def _get_db(client):
 
 
 def _seed_yesterday(db: Session, hours: list[int], temp: float = 22.0,
-                    humidity: float = 55.0, reboot_flag: str = None):
+                    humidity: float = 55.0, reboot_flag: bool = False):
     """
     Seed readings at specific hours of yesterday.
     hours — list of hour values (0–23) to place readings at.
@@ -122,7 +122,7 @@ class TestDailySyncCalculation:
         db.add_all([
             SensorReading(
                 timestamp=datetime.combine(yesterday, datetime.min.time().replace(hour=0)).replace(tzinfo=timezone.utc),
-                temperature=22.0, humidity=55.0, pressure=101000, reboot_flag="rebooted",
+                temperature=22.0, humidity=55.0, pressure=101000, reboot_flag=True,
             ),
             SensorReading(
                 timestamp=datetime.combine(yesterday, datetime.min.time().replace(hour=12)).replace(tzinfo=timezone.utc),
@@ -130,7 +130,7 @@ class TestDailySyncCalculation:
             ),
             SensorReading(
                 timestamp=datetime.combine(yesterday, datetime.min.time().replace(hour=22)).replace(tzinfo=timezone.utc),
-                temperature=23.0, humidity=56.0, pressure=101000, reboot_flag="rebooted",
+                temperature=23.0, humidity=56.0, pressure=101000, reboot_flag=True,
             ),
         ])
         db.commit()

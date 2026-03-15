@@ -1,5 +1,5 @@
 """
-conftest.py — shared fixtures for the weather station test suite.
+conftest.py — shared fixtures for the sensor API test suite.
 
 Design decisions:
 - One in-memory SQLite DB per test function (scope="function") — complete isolation,
@@ -34,7 +34,7 @@ RAMP_DATA = [
         "humidity":    round(55.0 + i * 0.1, 1),
         "pressure":    101000,
         "timestamp":   BASE_TIME + timedelta(minutes=i * 5),
-        "reboot_flag": "rebooted" if i == 0 else None,
+        "reboot_flag": True if i == 0 else None,
     }
     for i in range(10)
 ]

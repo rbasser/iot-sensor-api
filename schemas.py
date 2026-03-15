@@ -7,7 +7,7 @@ class ReadingIncoming(BaseModel):
     temperature: float
     humidity: float
     gas_resistance: Optional[int] = None
-    reboot_flag: Optional[str] = None
+    reboot_flag: Optional[bool] = None
 
 class ReadingBase(BaseModel):
     pressure: int = Field(..., ge=80000, le=120000) 

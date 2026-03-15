@@ -132,9 +132,11 @@ class TestPost:
         assert r.json() == []
 
     def test_reboot_flag_is_stored(self, client, auth_headers):
-        payload = {"temperature": 22.0, "humidity": 50.0, "pressure": 101000, "reboot_flag": "rebooted"}
+        payload = {"temperature": 22.0, "humidity": 50.0, "pressure": 101000, "reboot_flag": True}
         r = client.post("/readings/", json=payload, headers=auth_headers)
-        assert r.json()["reboot_flag"] == "rebooted"
+        assert r.status_code == 200
+        assert "reboot_flag" in r.json(), f"Unexpected response: {r.json()}"
+        assert r.json()["reboot_flag"] == True
 
 
 # ===========================================================================
