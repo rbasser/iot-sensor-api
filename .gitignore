@@ -5,3 +5,4 @@ __pycache__/
 PicoW/personalDetails.py    
 alembic/README
 python_functions
+db_migration.py
