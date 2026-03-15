@@ -16,6 +16,8 @@ import models
 config = context.config
 #url = os.getenv("DATABASE_URL") or os.getenv("EXT_DB_URL")
 url = os.getenv("AIVEN_DB_URL")
+if url and url.startswith("postgres://"):
+    url = url.replace("postgres://", "postgresql://", 1)
 config.set_main_option("sqlalchemy.url", url)
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
