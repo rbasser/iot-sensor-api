@@ -14,7 +14,7 @@ class ReadingBase(BaseModel):
     temperature: float = Field(..., ge=-10, le=50) 
     humidity: float = Field(..., ge=0.0, le=100.0)
     gas_resistance: Optional[int] = None
-    reboot_flag: Optional[str] = None
+    reboot_flag: Optional[bool] = None
 
 class ReadingCreate(ReadingBase):
     pass

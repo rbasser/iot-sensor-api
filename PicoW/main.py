@@ -122,6 +122,8 @@ while True:
     
     # 3. Read sensor data
     temperature, raw_pressure, humidity, raw_gas, status, gas_index, meas_index = sensor.read(heater_temp=h_temp, heater_duration=h_dur)
+    temperature -= 1.15
+    humidity -= 0.5
     
     # 4. Format payload to match schemas.py (Lowercase keys!)
     pressure = int(round(raw_pressure))
@@ -133,7 +135,7 @@ while True:
         "humidity": humidity,
         "pressure": pressure,
         "gas_resistance": gas_resistance,
-        "reboot_flag": "rebooted" if just_rebooted else None
+        "reboot_flag": 1 if just_rebooted else 0
     }
     
     print(f"Sending to Render -> Temp: {temperature:0.1f}C, Humidity: {humidity: 0.1f} Press: {pressure}Pa")
@@ -162,5 +164,5 @@ while True:
         print(f"Connection failed: {e}\n")
 
     # 7. Wait for next cycle
-    time.sleep(30)
+    time.sleep(26.78)
 

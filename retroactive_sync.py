@@ -1,7 +1,10 @@
 import os
+import sys
+from dotenv import load_dotenv
+load_dotenv()
 from sqlalchemy.orm import Session
-from sqlalchemy import func, Integer
-from sqlalchemy.sql.expression import cast
+from sqlalchemy import func, case
+from sqlalchemy.dialects.postgresql import insert
 from db import SessionLocal
 from models import SensorReading, DailySummary
 from datetime import datetime, timedelta
@@ -10,6 +13,9 @@ from zoneinfo import ZoneInfo
 TZ = ZoneInfo("Europe/London") 
 
 def run_retroactive_aggregation(days_back=7):
+    if SessionLocal is None:
+        print("ERROR: No database URL found. Check your .env file.")
+        sys.exit(1)
     db = SessionLocal()
     try:
         today = datetime.now(tz=TZ).date()
@@ -61,22 +67,23 @@ def run_retroactive_aggregation(days_back=7):
                 func.avg(SensorReading.temperature),
                 func.avg(SensorReading.humidity),
                 func.avg(SensorReading.pressure),
-                func.sum(cast(SensorReading.reboot_flag, Integer))
+                func.count(SensorReading.reboot_flag)
             ).filter(
                 SensorReading.timestamp >= day_start,
                 SensorReading.timestamp < day_end
             ).first()
 
-            summary = DailySummary(
-                date=target_date,
-                avg_temp=round(stats[0], 2),
-                avg_humidity=round(stats[1], 2),
-                avg_pressure=round(stats[2], 0),
-                reboot_count=int(stats[3] or 0) 
-            )
+            
+            stmt = insert(DailySummary).values(
+            date=target_date,
+            avg_temp=round(stats[0], 2),
+            avg_humidity=round(stats[1], 2),
+            avg_pressure=round(stats[2], 0),
+            reboot_count=int(stats[3] or 0)
+            ).on_conflict_do_nothing()
 
             try:
-                db.add(summary)
+                db.execute(stmt)
                 db.commit()
                 print(f"Aggregation successful! Summarised {reading_count} readings.")
             except Exception as e:
