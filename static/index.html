@@ -682,7 +682,7 @@
     }
 
     document.addEventListener('keydown', e => {
-        if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key.toLowerCase() === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey) {
             btnWindow.classList.toggle('visible');
             const show = btn7d.style.display === 'none';
             btn7d.style.display = show ? 'inline-block' : 'none';
