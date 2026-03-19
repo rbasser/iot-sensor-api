@@ -387,7 +387,6 @@
 
     // ── Chart Helper Functions ──
     function buildSeries(readings, maxGapMinutes) {
-        // We explicitly sort the data chronologically (oldest -> newest) for Chart.js
         const sorted = readings.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         const temps = [], hums = [];
         for (let i = 0; i < sorted.length; i++) {
@@ -396,7 +395,6 @@
             hums.push({  x: t, y: sorted[i].humidity });
             if (i < sorted.length - 1) {
                 const gap = (new Date(sorted[i+1].timestamp) - t) / 60000;
-                // Dynamically break the line if the gap exceeds our view's threshold
                 if (gap > maxGapMinutes) {
                     const mid = new Date(t.getTime() + gap * 30000);
                     temps.push({ x: mid, y: null });
@@ -416,15 +414,11 @@
     // ── Render Chart ──
     function renderChart(xMin, xMax) {
         const ctx = document.getElementById('sensorChart').getContext('2d');
-        
-        // Use a 25 min threshold for 7d view (due to bucket sizes) and 4 min for standard views
         const gapThreshold = show7d ? 25 : 4;
         const { temps, hums } = buildSeries(cachedHistory, gapThreshold);
         const zoneData = buildHumidityZone(cachedHistory, showHumidityZone);
-
         const base = { fill: true, tension: 0.35, pointRadius: 0, pointHoverRadius: 4, borderWidth: 1.5, spanGaps: false };
 
-        // Calculate absolute minimum timestamp correctly, regardless of API sorting
         let trueMin = xMin;
         if (cachedHistory && cachedHistory.length > 0) {
             trueMin = Math.min(...cachedHistory.map(r => new Date(r.timestamp).getTime()));

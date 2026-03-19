@@ -206,8 +206,7 @@ class TestDailySummary:
         page.route("**/readings/history**", lambda r: r.fulfill(json=MOCK_HISTORY))
         page.route("**/summaries/**",     lambda r: r.fulfill(json=[]))
         page.goto(f"{static_server}/index.html", wait_until="networkidle")
-        expect(page.locator("#summary-body")).to_contain_text("Waiting for daily summary")
-
+        expect(page.locator("#summary-body")).to_contain_text("No summary data available")
 
 class TestApiOffline:
     """Dashboard degrades gracefully when the API is unreachable."""
