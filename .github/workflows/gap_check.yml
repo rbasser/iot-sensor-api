@@ -2,7 +2,7 @@ name: Data Gap Alert
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # every 10 minutes
+    - cron: '*/15 * * * *' 
   workflow_dispatch:
 
 jobs:
