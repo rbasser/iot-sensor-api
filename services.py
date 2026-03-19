@@ -1,5 +1,4 @@
-from sqlalchemy import func
-
+from sqlalchemy import func, text
 from models import SensorReading
 from sqlalchemy.orm import Session
 from schemas import ReadingCreate
