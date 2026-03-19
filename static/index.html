@@ -5,9 +5,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sensor Data Dashboard</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+    
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -84,6 +89,20 @@
         .status-dot.online  { background: var(--online);  box-shadow: 0 0 0 3px rgba(61,184,106,0.2); }
         .status-dot.offline { background: var(--offline); box-shadow: 0 0 0 3px rgba(217,79,61,0.2); }
 
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-dot.loading {
+            width: 12px;
+            height: 12px;
+            background: transparent !important;
+            border: 2px solid var(--border);
+            border-top-color: var(--muted);
+            box-shadow: none !important;
+            animation: spin 0.6s linear infinite;
+        }
+
         /* ── Stat Cards ── */
         .stats {
             display: grid;
@@ -152,8 +171,6 @@
             color: var(--muted);
         }
 
-
-
         .stat-card.temp .stat-value { color: var(--temp); }
         .stat-card.hum  .stat-value { color: var(--hum); }
 
@@ -173,6 +190,15 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+            flex-wrap: wrap; 
+            gap: 12px;
+        }
+
+        .card-header-group {
+            display: flex; 
+            align-items: center; 
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
         .card-title {
@@ -183,130 +209,68 @@
             color: var(--muted);
         }
 
-        .legend {
-            display: flex;
-            gap: 16px;
-        }
-
+        .legend { display: flex; gap: 16px; }
         .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.72rem;
-            font-family: 'DM Mono', monospace;
-            color: var(--muted);
+            display: flex; align-items: center; gap: 6px;
+            font-size: 0.72rem; font-family: 'DM Mono', monospace; color: var(--muted);
         }
+        .legend-line { width: 18px; height: 2px; border-radius: 2px; }
 
-        .legend-line {
-            width: 18px;
-            height: 2px;
-            border-radius: 2px;
-        }
-
-        .btn-window {
-            background: none;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 4px 12px;
-            font-family: 'DM Mono', monospace;
-            font-size: 0.68rem;
-            color: var(--muted);
-            cursor: pointer;
-            white-space: nowrap;
+        .btn-window, .btn-range {
+            background: none; border: 1px solid var(--border); border-radius: 6px;
+            padding: 4px 12px; font-family: 'DM Mono', monospace; font-size: 0.68rem;
+            color: var(--muted); cursor: pointer; white-space: nowrap;
             transition: background 0.2s, border-color 0.2s, color 0.2s;
         }
+        
+        .btn-range { padding: 3px 10px; }
         .btn-window { display: none; }
         .btn-window.visible { display: inline-block; }
-        .btn-window:hover { border-color: var(--text); color: var(--text); }
-        .btn-range {
-            background: none;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 3px 10px;
-            font-family: 'DM Mono', monospace;
-            font-size: 0.68rem;
-            color: var(--muted);
-            cursor: pointer;
-            transition: background 0.2s, border-color 0.2s, color 0.2s;
+        
+        .btn-window:hover, .btn-range:hover { border-color: var(--text); color: var(--text); }
+        .btn-range.active, .btn-window.active { background: var(--text); border-color: var(--text); color: var(--surface); }
+        
+        .btn-reset {
+            background: var(--temp-bg); border: 1px solid var(--temp); color: var(--temp);
+            border-radius: 6px; padding: 4px 12px; font-family: 'DM Mono', monospace;
+            font-size: 0.68rem; cursor: pointer; display: none; transition: all 0.2s;
         }
-        .btn-range:hover { border-color: var(--text); color: var(--text); }
-        .btn-range.active {
-            background: var(--text);
-            border-color: var(--text);
-            color: var(--surface);
-        }
-        .btn-window.active {
-            background: var(--text);
-            border-color: var(--text);
-            color: var(--surface);
-        }
+        .btn-reset:hover { background: var(--temp); color: var(--surface); }
 
-        .chart-wrap {
-            position: relative;
-            height: 280px;
-        }
-
+        .chart-wrap { position: relative; height: 280px; }
         .no-data {
-            position: absolute;
-            inset: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            font-family: 'DM Mono', monospace;
-            font-size: 0.82rem;
-            color: var(--muted);
+            position: absolute; inset: 0; display: none; align-items: center;
+            justify-content: center; font-family: 'DM Mono', monospace;
+            font-size: 0.82rem; color: var(--muted);
         }
 
         /* ── Summary Table ── */
         .table-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 24px 28px;
-            opacity: 0;
-            animation: fadeUp 0.4s ease 0.21s forwards;
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 24px 28px; opacity: 0; animation: fadeUp 0.4s ease 0.21s forwards;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 4px;
-        }
+        .table-responsive { width: 100%; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 4px; min-width: 450px; }
 
         thead th {
-            font-size: 0.68rem;
-            font-family: 'DM Mono', monospace;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-            padding: 0 0 12px;
-            text-align: left;
+            font-size: 0.68rem; font-family: 'DM Mono', monospace; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--muted); padding: 0 0 12px; text-align: left;
             border-bottom: 1px solid var(--border);
         }
 
-        tbody td {
-            padding: 13px 0;
-            font-size: 0.85rem;
-            border-bottom: 1px solid var(--border);
-        }
-
+        tbody td { padding: 13px 0; font-size: 0.85rem; border-bottom: 1px solid var(--border); }
         tbody tr:last-child td { border-bottom: none; }
         tbody tr:hover td { background: var(--bg); }
 
         .cell-temp { color: var(--temp); font-family: 'DM Mono', monospace; }
         .cell-hum  { color: var(--hum);  font-family: 'DM Mono', monospace; }
         .cell-mono { font-family: 'DM Mono', monospace; color: var(--text); }
+        .empty-row td { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.82rem; padding: 20px 0; }
 
-        .empty-row td {
-            color: var(--muted);
-            font-family: 'DM Mono', monospace;
-            font-size: 0.82rem;
-            padding: 20px 0;
-        }
-
-        @keyframes fadeUp {
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .table-loading { animation: pulse 1.5s ease-in-out infinite; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.82rem; padding: 20px 0; text-align: center; }
+        @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
 
         @media (max-width: 520px) {
             .stats { grid-template-columns: 1fr; }
@@ -350,29 +314,24 @@
 
 <div class="chart-card">
     <div class="card-header">
-        <div style="display:flex; align-items:center; gap:10px;">
+        <div class="card-header-group">
             <span class="card-title" id="chart-title">Last 60 minutes</span>
             <button class="btn-range" id="btn-24h">24h</button>
             <button class="btn-range" id="btn-7d" style="display:none;">7d</button>
+            <button class="btn-reset" id="btn-reset-zoom">Reset Zoom</button>
         </div>
-        <div style="display:flex; align-items:center; gap:16px;">
+        <div class="card-header-group">
             <button class="btn-window" id="btn-window">show most recent</button>
             <button class="btn-range" id="btn-humidity-zone">thresholds</button>
             <div class="legend">
-                <div class="legend-item">
-                    <div class="legend-line" style="background: var(--temp)"></div>
-                    Temp °C
-                </div>
-                <div class="legend-item">
-                    <div class="legend-line" style="background: var(--hum)"></div>
-                    Hum %
-                </div>
+                <div class="legend-item"><div class="legend-line" style="background: var(--temp)"></div>Temp °C</div>
+                <div class="legend-item"><div class="legend-line" style="background: var(--hum)"></div>Hum %</div>
             </div>
         </div>
     </div>
     <div class="chart-wrap">
         <canvas id="sensorChart"></canvas>
-        <div class="no-data" id="no-data-msg">No data in the last hour</div>
+        <div class="no-data" id="no-data-msg">No data available</div>
     </div>
 </div>
 
@@ -380,115 +339,55 @@
     <div class="card-header">
         <span class="card-title">Weekly summary</span>
     </div>
-    <table>
-        <thead>
-            <tr>
-                <th>Day</th>
-                <th>Date</th>
-                <th>Avg Temp</th>
-                <th>Avg Humidity</th>
-                <th>Reboots</th>
-            </tr>
-        </thead>
-        <tbody id="summary-body">
-            <tr class="empty-row"><td colspan="5">Loading…</td></tr>
-        </tbody>
-    </table>
+    <div class="table-responsive">
+        <table>
+            <thead>
+                <tr>
+                    <th>Day</th>
+                    <th>Date</th>
+                    <th>Avg Temp</th>
+                    <th>Avg Humidity</th>
+                    <th>Reboots</th>
+                </tr>
+            </thead>
+            <tbody id="summary-body">
+                <tr class="empty-row"><td colspan="5">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <script>
     const API_BASE = "https://iot-ingestion-api.onrender.com";
 
-    // ── Window toggle — false = rolling last hour, true = most recent data ──
+    // ── Global State ──
+    let isUserExploring = false;
+    let cachedHistory = [];
+    let chart;
+    
     let showMostRecent = false;
     let show24h = false;
-    const btnWindow = document.getElementById('btn-window');
-    const btn24h   = document.getElementById('btn-24h');
-
-    btnWindow.addEventListener('click', () => {
-        showMostRecent = !showMostRecent;
-        btnWindow.classList.toggle('active', showMostRecent);
-        btnWindow.innerText = showMostRecent ? 'show last hour' : 'show most recent';
-        document.getElementById('chart-title').innerText = showMostRecent ? 'Most recent data' : (show24h ? 'Last 24 hours' : 'Last 60 minutes');
-        updateChart();
-    });
-
-    btn24h.addEventListener('click', () => {
-        show24h = !show24h;
-        btn24h.classList.toggle('active', show24h);
-        if (show24h) {
-            showMostRecent = false;
-            show7d = false;
-            btn7d.classList.remove('active');
-            btnWindow.classList.remove('active');
-            btnWindow.innerText = 'show most recent';
-        }
-        document.getElementById('chart-title').innerText = show24h ? 'Last 24 hours' : 'Last 60 minutes';
-        update();
-    });
-
-    // ── 7d toggle (debug, revealed with 'd') ────────────────────────
     let show7d = false;
-    const btn7d = document.getElementById('btn-7d');
-    btn7d.addEventListener('click', () => {
-        show7d = !show7d;
-        btn7d.classList.toggle('active', show7d);
-        if (show7d) {
-            show24h = false;
-            showMostRecent = false;
-            btn24h.classList.remove('active');
-            btnWindow.classList.remove('active');
-            btnWindow.innerText = 'show most recent';
-            document.getElementById('chart-title').innerText = 'Last 7 days';
-        } else {
-            document.getElementById('chart-title').innerText = 'Last 60 minutes';
+
+    // ── Smart Fetching Logic ──
+    async function fetchHistoricalData(hoursToFetch) {
+        let url = `${API_BASE}/readings/history?hours=${hoursToFetch}`;
+        
+        if (hoursToFetch > 2) {
+            url = `${API_BASE}/readings/summary?hours=${hoursToFetch}&buckets=800`;
         }
-        update();
-    });
 
-    // ── Humidity zone toggle (debug, revealed with 'd') ─────────────
-    let showHumidityZone = true;
-    const btnHumidityZone = document.getElementById('btn-humidity-zone');
-    btnHumidityZone.classList.add('active');  // on by default
-    btnHumidityZone.addEventListener('click', () => {
-        showHumidityZone = !showHumidityZone;
-        btnHumidityZone.classList.toggle('active', showHumidityZone);
-        // Need to destroy and recreate chart to add/remove annotation plugin
-        if (chart) { chart.destroy(); chart = null; }
-        updateChart();
-    });
-
-    // ── Status indicator ──────────────────────────────────────────
-    function updateStatus(timestamp) {
-        const diff = Math.floor((Date.now() - new Date(timestamp)) / 1000);
-        const mins = Math.floor(diff / 60);
-        const dot  = document.getElementById('status-dot');
-        const txt  = document.getElementById('status-text');
-        const upd  = document.getElementById('last-updated');
-
-        dot.className = 'status-dot ' + (mins < 2 ? 'online' : 'offline');
-        txt.innerText  = mins < 2 ? 'pico online' : 'pico offline';
-
-        if (diff < 60)       upd.innerText = 'updated just now';
-        else if (mins === 1) upd.innerText = 'updated 1 min ago';
-        else if (mins < 60)  upd.innerText = `updated ${mins} mins ago`;
-        else                 upd.innerText = `updated ${Math.floor(mins / 60)}h ago`;
+        try {
+            const res = await fetch(url);
+            cachedHistory = await res.json();
+        } catch (err) {
+            console.error('Failed to fetch historical data:', err);
+        }
     }
 
-    // ── Chart ─────────────────────────────────────────────────────
-    let chart;
-    let cachedHistory = [];
-
-    // Reduce point count for large time windows to keep rendering fast.
-    function downsample(readings, maxPoints) {
-        if (!maxPoints || readings.length <= maxPoints) return readings;
-        const step = Math.ceil(readings.length / maxPoints);
-        return readings.filter((_, i) => i % step === 0);
-    }
-
-    // Convert readings into {x: Date, y: value} point arrays.
-    // Inserts a null point into gaps > 2 min so spanGaps:false draws a break.
-    function buildSeries(readings) {
+    // ── Chart Helper Functions ──
+    function buildSeries(readings, maxGapMinutes) {
+        // We explicitly sort the data chronologically (oldest -> newest) for Chart.js
         const sorted = readings.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         const temps = [], hums = [];
         for (let i = 0; i < sorted.length; i++) {
@@ -497,7 +396,8 @@
             hums.push({  x: t, y: sorted[i].humidity });
             if (i < sorted.length - 1) {
                 const gap = (new Date(sorted[i+1].timestamp) - t) / 60000;
-                if (gap > 2) {
+                // Dynamically break the line if the gap exceeds our view's threshold
+                if (gap > maxGapMinutes) {
                     const mid = new Date(t.getTime() + gap * 30000);
                     temps.push({ x: mid, y: null });
                     hums.push({  x: mid, y: null });
@@ -507,76 +407,45 @@
         return { temps, hums };
     }
 
-    // Decide the x-axis min/max and which readings to show.
-    function updateChart() {
-        const now = Date.now();
-        let xMin, xMax, filtered;
-
-        if (showMostRecent) {
-            if (cachedHistory.length === 0) {
-                filtered = [];
-                xMin = new Date(now - 60 * 60 * 1000);
-                xMax = new Date(now);
-            } else {
-                const newest = Math.max(...cachedHistory.map(r => new Date(r.timestamp).getTime()));
-                xMax = new Date(newest);
-                xMin = new Date(newest - 60 * 60 * 1000);
-                filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
-            }
-        } else if (show7d) {
-            xMin = new Date(now - 7 * 24 * 60 * 60 * 1000);
-            xMax = new Date(now);
-            filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
-        } else if (show24h) {
-            xMin = new Date(now - 24 * 60 * 60 * 1000);
-            xMax = new Date(now);
-            filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
-        } else {
-            xMin = new Date(now - 60 * 60 * 1000);
-            xMax = new Date(now);
-            filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
-        }
-
-        renderChart(filtered, xMin, xMax);
-    }
-
-    // Build zone dataset — returns the raw humidity series used for threshold fills.
-    // Chart.js fill.target.value draws a fill between the line and a constant value.
-    // We use this twice: once capped at 80 (yellow zone 70-80), once uncapped (black zone >80).
     function buildHumidityZone(readings, enabled) {
-        if (!enabled) return [];
+        if (!enabled || !readings.some(r => r.humidity > 70)) return [];
         const sorted = readings.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         return sorted.map(r => ({ x: new Date(r.timestamp), y: r.humidity }));
     }
 
-    function renderChart(readings, xMin, xMax) {
-        const ctx    = document.getElementById('sensorChart').getContext('2d');
-        const noData = document.getElementById('no-data-msg');
-        noData.style.display = 'none';
+    // ── Render Chart ──
+    function renderChart(xMin, xMax) {
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        
+        // Use a 25 min threshold for 7d view (due to bucket sizes) and 4 min for standard views
+        const gapThreshold = show7d ? 25 : 4;
+        const { temps, hums } = buildSeries(cachedHistory, gapThreshold);
+        const zoneData = buildHumidityZone(cachedHistory, showHumidityZone);
 
-        const { temps, hums } = buildSeries(readings);
-        const zoneData = buildHumidityZone(readings, showHumidityZone);
-        const zone70 = zoneData;
-        const zone80 = zoneData;
+        const base = { fill: true, tension: 0.35, pointRadius: 0, pointHoverRadius: 4, borderWidth: 1.5, spanGaps: false };
 
-        const base = {
-            fill: true,
-            tension: 0.35,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            borderWidth: 1.5,
-            spanGaps: false,
-        };
+        // Calculate absolute minimum timestamp correctly, regardless of API sorting
+        let trueMin = xMin;
+        if (cachedHistory && cachedHistory.length > 0) {
+            trueMin = Math.min(...cachedHistory.map(r => new Date(r.timestamp).getTime()));
+        }
+        const dataMax = Date.now();
 
         if (chart) {
             chart.data.datasets[0].data = temps;
             chart.data.datasets[1].data = hums;
-            const zd = buildHumidityZone(readings, showHumidityZone);
-            chart.data.datasets[2].data = zd;
-            chart.data.datasets[3].data = zd;
-            chart.options.scales.x.min       = xMin;
-            chart.options.scales.x.max       = xMax;
-            chart.options.scales.x.time.stepSize = show7d ? 720 : (show24h ? 60 : 10);
+            chart.data.datasets[2].data = zoneData;
+            chart.data.datasets[3].data = zoneData;
+            
+            chart.options.plugins.zoom.limits = {
+                x: { min: trueMin, max: dataMax, minRange: 10 * 60 * 1000 } 
+            };
+
+            if (!isUserExploring) {
+                chart.options.scales.x.min = xMin;
+                chart.options.scales.x.max = xMax;
+            }
+            
             chart.update('none');
             return;
         }
@@ -585,140 +454,222 @@
             type: 'line',
             data: {
                 datasets: [
-                    { ...base, label: 'Temperature (°C)', data: temps, borderColor: '#d94f3d', backgroundColor: 'rgba(217,79,61,0.06)', yAxisID: 'y'  },
-                    { ...base, label: 'Humidity (%)',      data: hums,  borderColor: '#3b82c4', backgroundColor: 'rgba(59,130,196,0.06)', yAxisID: 'y1' },
+                    { ...base, label: 'Temperature (°C)', data: temps, borderColor: '#d94f3d', backgroundColor: 'rgba(217,79,61,0.06)', yAxisID: 'y', order: 1  },
+                    { ...base, label: 'Humidity (%)',      data: hums,  borderColor: '#3b82c4', backgroundColor: 'rgba(59,130,196,0.06)', yAxisID: 'y1', order: 1 },
                     {
-                        // Yellow fill between 70% line and data (only where data > 70)
-                        label: 'Humidity 70-80%',
-                        data: zone70,
-                        borderColor: 'rgba(255,180,0,0.4)',
-                        borderWidth: 1,
-                        borderDash: [4, 3],
-                        backgroundColor: 'transparent',
-                        fill: { target: { value: 70 }, above: 'rgba(255,210,0,0.25)', below: 'transparent' },
-                        pointRadius: 0,
-                        spanGaps: true,
-                        yAxisID: 'y1',
-                        tension: 0.35,
-                        clip: { top: false, bottom: false, left: false, right: false },
+                        label: 'Humidity 70-80%', data: zoneData, borderColor: 'rgba(255,180,0,0.4)', borderWidth: 1, borderDash: [4, 3],
+                        backgroundColor: 'transparent', fill: { target: { value: 70 }, above: 'rgba(255,210,0,0.25)', below: 'transparent' },
+                        pointRadius: 0, spanGaps: true, yAxisID: 'y1', tension: 0.35, clip: { top: false, bottom: false, left: false, right: false }, order: 2
                     },
                     {
-                        // Dark fill above 80% line
-                        label: 'Humidity >80%',
-                        data: zone80,
-                        borderColor: 'rgba(20,20,20,0.45)',
-                        borderWidth: 1,
-                        borderDash: [4, 3],
-                        backgroundColor: 'transparent',
-                        fill: { target: { value: 80 }, above: 'rgba(20,20,20,0.3)', below: 'transparent' },
-                        pointRadius: 0,
-                        spanGaps: true,
-                        yAxisID: 'y1',
-                        tension: 0.35,
+                        label: 'Humidity >80%', data: zoneData, borderColor: 'rgba(20,20,20,0.45)', borderWidth: 1, borderDash: [4, 3],
+                        backgroundColor: 'transparent', fill: { target: { value: 80 }, above: 'rgba(20,20,20,0.3)', below: 'transparent' },
+                        pointRadius: 0, spanGaps: true, yAxisID: 'y1', tension: 0.35, order: 2
                     }
                 ]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { intersect: false, mode: 'index' },
+                responsive: true, maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'nearest', axis: 'x' },
                 plugins: {
+                    zoom: {
+                        limits: {
+                            x: { min: trueMin, max: dataMax, minRange: 10 * 60 * 1000 }
+                        },
+                        pan: { 
+                            enabled: true, mode: 'x', 
+                            onPanStart: () => {
+                                isUserExploring = true;
+                                document.getElementById('btn-reset-zoom').style.display = 'inline-block';
+                            } 
+                        },
+                        zoom: { 
+                            wheel: { enabled: true, speed: 0.12 }, 
+                            pinch: { enabled: true }, mode: 'x', 
+                            onZoomStart: () => {
+                                isUserExploring = true;
+                                document.getElementById('btn-reset-zoom').style.display = 'inline-block';
+                                return true;
+                            }
+                        }
+                    },
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: '#ffffff',
-                        borderColor: '#e8e8e4',
-                        borderWidth: 1,
-                        titleColor: '#888880',
-                        bodyColor: '#1a1a18',
-                        titleFont: { family: 'DM Mono', size: 11 },
-                        bodyFont:  { family: 'DM Mono', size: 12 },
-                        padding: 10,
+                        backgroundColor: '#ffffff', borderColor: '#e8e8e4', borderWidth: 1, titleColor: '#888880', bodyColor: '#1a1a18',
+                        titleFont: { family: 'DM Mono', size: 11 }, bodyFont: { family: 'DM Mono', size: 12 }, padding: 10,
+                        filter: item => item.datasetIndex < 2,
                         callbacks: {
                             title: items => {
                                 if (!items.length) return '';
                                 const d = new Date(items[0].parsed.x);
-                                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                                return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                             },
-                            label: ctx => {
-                                const unit = ctx.datasetIndex === 0 ? '°C' : '%';
-                                return ` ${ctx.parsed.y !== null ? ctx.parsed.y.toFixed(1) : '—'}${unit}`;
-                            }
+                            label: ctx => ` ${ctx.parsed.y !== null ? ctx.parsed.y.toFixed(1) : '—'}${ctx.datasetIndex === 0 ? '°C' : '%'}`
                         }
                     }
                 },
                 scales: {
                     x: {
-                        type: 'time',
-                        min: xMin,
-                        max: xMax,
-                        time: {
-                            unit: 'minute',
-                            stepSize: show7d ? 720 : (show24h ? 60 : 10),
-                            displayFormats: { minute: 'HH:mm', hour: 'HH:mm' }
-                        },
-                        grid: { color: '#f0f0ec' },
-                        border: { display: false },
-                        ticks: {
-                            color: '#888880',
-                            font: { family: 'DM Mono', size: 10 },
-                            maxRotation: 0,
-                            autoSkip: false,
-                        }
+                        type: 'time', min: xMin, max: xMax,
+                        time: { minUnit: 'minute', displayFormats: { minute: 'HH:mm', hour: 'HH:mm', day: 'MMM d' } },
+                        grid: { color: '#f0f0ec' }, border: { display: false },
+                        ticks: { color: '#888880', font: { family: 'DM Mono', size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
                     },
                     y: {
-                        position: 'left',
-                        grid: { color: '#f0f0ec' },
-                        border: { display: false },
-                        ticks: {
-                            color: '#d94f3d',
-                            font: { family: 'DM Mono', size: 10 },
-                            count: 7,
-                            callback: function(v) {
-                                const range = this.chart.scales.y.max - this.chart.scales.y.min;
-                                return range < 2 ? v.toFixed(2) + '°' : v.toFixed(1) + '°';
-                            }
-                        }
+                        position: 'left', grid: { color: '#f0f0ec' }, border: { display: false },
+                        ticks: { color: '#d94f3d', font: { family: 'DM Mono', size: 10 }, count: 7, callback: function(v) { return (this.chart.scales.y.max - this.chart.scales.y.min) < 2 ? v.toFixed(2) + '°' : v.toFixed(1) + '°'; } }
                     },
                     y1: {
-                        position: 'right',
-                        grid: { drawOnChartArea: false },
-                        border: { display: false },
-                        ticks: {
-                            color: '#3b82c4',
-                            font: { family: 'DM Mono', size: 10 },
-                            count: 7,
-                            callback: function(v) {
-                                const range = this.chart.scales.y1.max - this.chart.scales.y1.min;
-                                return range < 2 ? v.toFixed(2) + '%' : v.toFixed(1) + '%';
-                            }
-                        }
+                        position: 'right', grid: { drawOnChartArea: false }, border: { display: false },
+                        ticks: { color: '#3b82c4', font: { family: 'DM Mono', size: 10 }, count: 7, callback: function(v) { return (this.chart.scales.y1.max - this.chart.scales.y1.min) < 2 ? v.toFixed(2) + '%' : v.toFixed(1) + '%'; } }
                     }
                 }
             }
         });
     }
 
-        // ── Main update ───────────────────────────────────────────────
-    async function update() {
+    // ── Main Controller ──
+    async function loadFullDashboard() {
+        if (isUserExploring) return; 
+
+        const dot = document.getElementById('status-dot');
+        const txt = document.getElementById('status-text');
+        dot.className = 'status-dot loading';
+        txt.innerText = 'updating...';
+
         try {
             const latestRes = await fetch(`${API_BASE}/readings/latest`);
-            const latest    = await latestRes.json();
-
+            const latest = await latestRes.json();
             document.getElementById('latest-temp').innerText = `${latest.temperature.toFixed(1)}°C`;
             document.getElementById('latest-hum').innerText  = `${latest.humidity.toFixed(1)}%`;
-            updateStatus(latest.timestamp);
 
-            // Fetch appropriate window based on active mode
-            const hoursToFetch = show7d ? 168 : (show24h ? 24 : 2);
-            const histRes = await fetch(`${API_BASE}/readings/history?hours=${hoursToFetch}`);
-            cachedHistory = await histRes.json();
+            const now = Date.now();
+            let xMin, xMax, hoursRequired;
 
-            updateChart();
+            if (show7d) {
+                hoursRequired = 168;
+                xMin = now - 7 * 24 * 60 * 60 * 1000;
+            } else if (show24h) {
+                hoursRequired = 24;
+                xMin = now - 24 * 60 * 60 * 1000;
+            } else {
+                hoursRequired = 1; 
+                xMin = now - 60 * 60 * 1000;
+            }
+            xMax = now;
+
+            await fetchHistoricalData(hoursRequired);
+
+            renderChart(xMin, xMax);
+            updateStatus(latest.timestamp); 
 
         } catch (err) {
             console.error('Update failed:', err);
-            document.getElementById('status-dot').className = 'status-dot offline';
-            document.getElementById('status-text').innerText = 'api offline';
+            dot.className = 'status-dot offline';
+            txt.innerText = 'api offline';
+        }
+    }
+
+    // ── Button Listeners ──
+    const btnWindow = document.getElementById('btn-window');
+    const btn24h   = document.getElementById('btn-24h');
+    const btn7d = document.getElementById('btn-7d');
+
+    btnWindow.addEventListener('click', () => {
+        showMostRecent = !showMostRecent;
+        btnWindow.classList.toggle('active', showMostRecent);
+        btnWindow.innerText = showMostRecent ? 'show last hour' : 'show most recent';
+        document.getElementById('chart-title').innerText = showMostRecent ? 'Most recent data' : (show24h ? 'Last 24 hours' : 'Last 60 minutes');
+        loadFullDashboard();
+    });
+
+    btn24h.addEventListener('click', () => {
+        show24h = !show24h;
+        btn24h.classList.toggle('active', show24h);
+        if (show24h) {
+            show7d = false; showMostRecent = false;
+            btn7d.classList.remove('active'); btnWindow.classList.remove('active');
+            btnWindow.innerText = 'show most recent';
+        }
+        document.getElementById('chart-title').innerText = show24h ? 'Last 24 hours' : 'Last 60 minutes';
+        loadFullDashboard();
+    });
+
+    btn7d.addEventListener('click', () => {
+        show7d = !show7d;
+        btn7d.classList.toggle('active', show7d);
+        if (show7d) {
+            show24h = false; showMostRecent = false;
+            btn24h.classList.remove('active'); btnWindow.classList.remove('active');
+            btnWindow.innerText = 'show most recent';
+            document.getElementById('chart-title').innerText = 'Last 7 days';
+        } else {
+            document.getElementById('chart-title').innerText = 'Last 60 minutes';
+        }
+        loadFullDashboard();
+    });
+
+    document.getElementById('btn-reset-zoom').addEventListener('click', () => {
+        isUserExploring = false;
+        document.getElementById('btn-reset-zoom').style.display = 'none';
+        
+        if (chart) {
+            chart.resetZoom();
+        }
+        loadFullDashboard(); 
+    });
+
+    let showHumidityZone = true;
+    const btnHumidityZone = document.getElementById('btn-humidity-zone');
+    btnHumidityZone.classList.add('active'); 
+    btnHumidityZone.addEventListener('click', () => {
+        showHumidityZone = !showHumidityZone;
+        btnHumidityZone.classList.toggle('active', showHumidityZone);
+        if (chart) { chart.destroy(); chart = null; }
+        
+        const now = Date.now();
+        const currentMin = show7d ? now - 7*24*60*60*1000 : (show24h ? now - 24*60*60*1000 : now - 60*60*1000);
+        renderChart(currentMin, now);
+    });
+
+    // ── Initialization & Timers ──
+    function updateStatus(timestamp) {
+        const diff = Math.floor((Date.now() - new Date(timestamp)) / 1000);
+        const mins = Math.floor(diff / 60);
+        const dot  = document.getElementById('status-dot');
+        const txt  = document.getElementById('status-text');
+        const upd  = document.getElementById('last-updated');
+        dot.className = 'status-dot ' + (mins < 2 ? 'online' : 'offline');
+        txt.innerText  = mins < 2 ? 'pico online' : 'pico offline';
+        if (diff < 60) upd.innerText = 'updated just now';
+        else if (mins === 1) upd.innerText = 'updated 1 min ago';
+        else if (mins < 60) upd.innerText = `updated ${mins} mins ago`;
+        else upd.innerText = `updated ${Math.floor(mins / 60)}h ago`;
+    }
+
+    async function loadSummary() {
+        const body = document.getElementById('summary-body');
+        body.innerHTML = `<tr><td colspan="5" class="table-loading">Fetching weekly data...</td></tr>`;
+        try {
+            const res = await fetch(`${API_BASE}/summaries/`);
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            const summaries = await res.json();
+            if (!summaries || summaries.length === 0) {
+                body.innerHTML = `<tr class="empty-row"><td colspan="5" style="text-align: center;">No summary data available.</td></tr>`;
+                return;
+            }
+            body.innerHTML = summaries.map(day => {
+                const d = new Date(day.date);
+                return `<tr>
+                    <td class="cell-mono">${d.toLocaleDateString('en-GB', { weekday: 'long' })}</td>
+                    <td class="cell-mono">${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                    <td class="cell-temp">${day.avg_temp.toFixed(1)}°C</td>
+                    <td class="cell-hum">${day.avg_humidity.toFixed(1)}%</td>
+                    <td class="cell-mono">${day.reboot_count}</td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            body.innerHTML = `<tr class="empty-row"><td colspan="5" style="text-align: center; color: var(--offline);">Failed to load summaries. Retrying soon...</td></tr>`;
         }
     }
 
@@ -727,71 +678,27 @@
         const agoHum  = document.getElementById('ago-hum');
         try {
             const res = await fetch(`${API_BASE}/readings/at-offset`);
-            if (res.status === 404) {
-                agoTemp.innerText = '—';
-                agoHum.innerText  = '—';
-                return;
-            }
+            if (res.status === 404) return;
             const data = await res.json();
             agoTemp.innerText = `${data.temperature.toFixed(1)}°C`;
             agoHum.innerText  = `${data.humidity.toFixed(1)}%`;
         } catch (e) {
-            agoTemp.innerText = '—';
-            agoHum.innerText  = '—';
-            console.error('1h ago fetch failed:', e);
+            agoTemp.innerText = '—'; agoHum.innerText  = '—';
         }
     }
 
-    // ── Weekly summary ────────────────────────────────────────────
-    async function loadSummary() {
-        try {
-            const res = await fetch(`${API_BASE}/summaries/`);
-            if (!res.ok) return;
-            const summaries = await res.json();
-            const body = document.getElementById('summary-body');
-
-            if (!summaries || summaries.length === 0) {
-                body.innerHTML = `<tr class="empty-row"><td colspan="5">Waiting for daily summary…</td></tr>`;
-                return;
-            }
-
-            body.innerHTML = summaries.map(day => {
-                const d = new Date(day.date);
-                const weekday = d.toLocaleDateString('en-GB', { weekday: 'long' });
-                const date    = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-                return `
-                <tr>
-                    <td class="cell-mono">${weekday}</td>
-                    <td class="cell-mono">${date}</td>
-                    <td class="cell-temp">${day.avg_temp.toFixed(1)}°C</td>
-                    <td class="cell-hum">${day.avg_humidity.toFixed(1)}%</td>
-                    <td class="cell-mono">${day.reboot_count}</td>
-                </tr>`;
-            }).join('');
-        } catch (e) {
-            console.error('Summary fetch failed:', e);
-        }
-    }
-
-    // Press 'd' to reveal/hide the debug buttons (show most recent + 7d)
     document.addEventListener('keydown', e => {
         if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey) {
             btnWindow.classList.toggle('visible');
             const show = btn7d.style.display === 'none';
             btn7d.style.display = show ? 'inline-block' : 'none';
-            if (!show && show7d) {
-                show7d = false;
-                btn7d.classList.remove('active');
-                document.getElementById('chart-title').innerText = show24h ? 'Last 24 hours' : 'Last 60 minutes';
-                update();
-            }
         }
     });
 
-    update();
+    loadFullDashboard();
     loadSummary();
     loadOneHourAgo();
-    setInterval(update, 30000);
+    setInterval(loadFullDashboard, 30000);
     setInterval(loadOneHourAgo, 30000);
 </script>
 
