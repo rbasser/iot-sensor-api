@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, status, Security
+from fastapi import FastAPI, Depends, HTTPException, Query, status, Security
 from fastapi.responses import JSONResponse
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,6 +69,15 @@ def get_reading_at_offset(
     if reading:
         return reading
     raise HTTPException(status_code=404, detail=f"No reading found within {window_minutes} min of {minutes_ago} min ago")
+
+@app.get("/readings/summary")
+def get_readings_summary(
+    hours: int = Query(default=168, ge=1, le=168),
+    buckets: int = Query(default=1000, ge=10, le=2000),
+    db: Session = Depends(get_db)
+):
+    bucket_seconds = (hours * 3600) / buckets
+    return services.get_bucketed_readings(db, hours=hours, bucket_seconds=bucket_seconds)
 
 @app.get("/readings/{id}", response_model=schemas.Reading)
 def get_reading_by_id(id: int, db: Session = Depends(get_db)):

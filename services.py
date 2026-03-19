@@ -38,6 +38,24 @@ def get_reading_at_offset(db: Session, minutes_ago: int = 60, window_minutes: in
             func.extract('epoch', target)
         )
     ).first()
+    
+def get_bucketed_readings(db: Session, hours: int, bucket_seconds: float):
+    result = db.execute(text("""
+        SELECT
+            MIN(timestamp) as timestamp,
+            ROUND(AVG(temperature)::numeric, 2) as temperature,
+            ROUND(AVG(humidity)::numeric, 2) as humidity,
+            ROUND(AVG(pressure)::numeric, 0) as pressure
+        FROM (
+            SELECT *,
+                FLOOR(EXTRACT(EPOCH FROM timestamp) / :bucket_seconds) as bucket
+            FROM sensor_readings
+            WHERE timestamp >= NOW() - (:hours * INTERVAL '1 hour')
+        ) bucketed
+        GROUP BY bucket
+        ORDER BY timestamp DESC
+    """), {"bucket_seconds": float(bucket_seconds), "hours": hours})
+    return [dict(row._mapping) for row in result]
 
 def delete_reading(db: Session, id: int):
     reading_queryset = db.query(SensorReading).filter(SensorReading.id == id).first()

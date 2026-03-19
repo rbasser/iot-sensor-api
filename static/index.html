@@ -218,6 +218,23 @@
         .btn-window { display: none; }
         .btn-window.visible { display: inline-block; }
         .btn-window:hover { border-color: var(--text); color: var(--text); }
+        .btn-range {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 3px 10px;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+        }
+        .btn-range:hover { border-color: var(--text); color: var(--text); }
+        .btn-range.active {
+            background: var(--text);
+            border-color: var(--text);
+            color: var(--surface);
+        }
         .btn-window.active {
             background: var(--text);
             border-color: var(--text);
@@ -333,8 +350,14 @@
 
 <div class="chart-card">
     <div class="card-header">
-        <span class="card-title" id="chart-title">Last 60 minutes</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span class="card-title" id="chart-title">Last 60 minutes</span>
+            <button class="btn-range" id="btn-24h">24h</button>
+            <button class="btn-range" id="btn-7d" style="display:none;">7d</button>
+        </div>
         <div style="display:flex; align-items:center; gap:16px;">
+            <button class="btn-window" id="btn-window">show most recent</button>
+            <button class="btn-range" id="btn-humidity-zone">thresholds</button>
             <div class="legend">
                 <div class="legend-item">
                     <div class="legend-line" style="background: var(--temp)"></div>
@@ -345,7 +368,6 @@
                     Hum %
                 </div>
             </div>
-            <button class="btn-window" id="btn-window">show most recent</button>
         </div>
     </div>
     <div class="chart-wrap">
@@ -379,12 +401,60 @@
 
     // ── Window toggle — false = rolling last hour, true = most recent data ──
     let showMostRecent = false;
+    let show24h = false;
     const btnWindow = document.getElementById('btn-window');
+    const btn24h   = document.getElementById('btn-24h');
+
     btnWindow.addEventListener('click', () => {
         showMostRecent = !showMostRecent;
         btnWindow.classList.toggle('active', showMostRecent);
         btnWindow.innerText = showMostRecent ? 'show last hour' : 'show most recent';
-        document.getElementById('chart-title').innerText = showMostRecent ? 'Most recent data' : 'Last 60 minutes';
+        document.getElementById('chart-title').innerText = showMostRecent ? 'Most recent data' : (show24h ? 'Last 24 hours' : 'Last 60 minutes');
+        updateChart();
+    });
+
+    btn24h.addEventListener('click', () => {
+        show24h = !show24h;
+        btn24h.classList.toggle('active', show24h);
+        if (show24h) {
+            showMostRecent = false;
+            show7d = false;
+            btn7d.classList.remove('active');
+            btnWindow.classList.remove('active');
+            btnWindow.innerText = 'show most recent';
+        }
+        document.getElementById('chart-title').innerText = show24h ? 'Last 24 hours' : 'Last 60 minutes';
+        update();
+    });
+
+    // ── 7d toggle (debug, revealed with 'd') ────────────────────────
+    let show7d = false;
+    const btn7d = document.getElementById('btn-7d');
+    btn7d.addEventListener('click', () => {
+        show7d = !show7d;
+        btn7d.classList.toggle('active', show7d);
+        if (show7d) {
+            show24h = false;
+            showMostRecent = false;
+            btn24h.classList.remove('active');
+            btnWindow.classList.remove('active');
+            btnWindow.innerText = 'show most recent';
+            document.getElementById('chart-title').innerText = 'Last 7 days';
+        } else {
+            document.getElementById('chart-title').innerText = 'Last 60 minutes';
+        }
+        update();
+    });
+
+    // ── Humidity zone toggle (debug, revealed with 'd') ─────────────
+    let showHumidityZone = true;
+    const btnHumidityZone = document.getElementById('btn-humidity-zone');
+    btnHumidityZone.classList.add('active');  // on by default
+    btnHumidityZone.addEventListener('click', () => {
+        showHumidityZone = !showHumidityZone;
+        btnHumidityZone.classList.toggle('active', showHumidityZone);
+        // Need to destroy and recreate chart to add/remove annotation plugin
+        if (chart) { chart.destroy(); chart = null; }
         updateChart();
     });
 
@@ -408,6 +478,13 @@
     // ── Chart ─────────────────────────────────────────────────────
     let chart;
     let cachedHistory = [];
+
+    // Reduce point count for large time windows to keep rendering fast.
+    function downsample(readings, maxPoints) {
+        if (!maxPoints || readings.length <= maxPoints) return readings;
+        const step = Math.ceil(readings.length / maxPoints);
+        return readings.filter((_, i) => i % step === 0);
+    }
 
     // Convert readings into {x: Date, y: value} point arrays.
     // Inserts a null point into gaps > 2 min so spanGaps:false draws a break.
@@ -436,8 +513,6 @@
         let xMin, xMax, filtered;
 
         if (showMostRecent) {
-            // Anchor to the newest reading, show 60 min ending there.
-            // Right half blank if Pico went offline mid-window.
             if (cachedHistory.length === 0) {
                 filtered = [];
                 xMin = new Date(now - 60 * 60 * 1000);
@@ -448,8 +523,15 @@
                 xMin = new Date(newest - 60 * 60 * 1000);
                 filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
             }
+        } else if (show7d) {
+            xMin = new Date(now - 7 * 24 * 60 * 60 * 1000);
+            xMax = new Date(now);
+            filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
+        } else if (show24h) {
+            xMin = new Date(now - 24 * 60 * 60 * 1000);
+            xMax = new Date(now);
+            filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
         } else {
-            // Rolling mode: always show last 60 min anchored to now.
             xMin = new Date(now - 60 * 60 * 1000);
             xMax = new Date(now);
             filtered = cachedHistory.filter(r => new Date(r.timestamp).getTime() >= xMin.getTime());
@@ -458,12 +540,24 @@
         renderChart(filtered, xMin, xMax);
     }
 
+    // Build zone dataset — returns the raw humidity series used for threshold fills.
+    // Chart.js fill.target.value draws a fill between the line and a constant value.
+    // We use this twice: once capped at 80 (yellow zone 70-80), once uncapped (black zone >80).
+    function buildHumidityZone(readings, enabled) {
+        if (!enabled) return [];
+        const sorted = readings.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        return sorted.map(r => ({ x: new Date(r.timestamp), y: r.humidity }));
+    }
+
     function renderChart(readings, xMin, xMax) {
         const ctx    = document.getElementById('sensorChart').getContext('2d');
         const noData = document.getElementById('no-data-msg');
         noData.style.display = 'none';
 
         const { temps, hums } = buildSeries(readings);
+        const zoneData = buildHumidityZone(readings, showHumidityZone);
+        const zone70 = zoneData;
+        const zone80 = zoneData;
 
         const base = {
             fill: true,
@@ -477,8 +571,12 @@
         if (chart) {
             chart.data.datasets[0].data = temps;
             chart.data.datasets[1].data = hums;
-            chart.options.scales.x.min  = xMin;
-            chart.options.scales.x.max  = xMax;
+            const zd = buildHumidityZone(readings, showHumidityZone);
+            chart.data.datasets[2].data = zd;
+            chart.data.datasets[3].data = zd;
+            chart.options.scales.x.min       = xMin;
+            chart.options.scales.x.max       = xMax;
+            chart.options.scales.x.time.stepSize = show7d ? 720 : (show24h ? 60 : 10);
             chart.update('none');
             return;
         }
@@ -488,7 +586,36 @@
             data: {
                 datasets: [
                     { ...base, label: 'Temperature (°C)', data: temps, borderColor: '#d94f3d', backgroundColor: 'rgba(217,79,61,0.06)', yAxisID: 'y'  },
-                    { ...base, label: 'Humidity (%)',      data: hums,  borderColor: '#3b82c4', backgroundColor: 'rgba(59,130,196,0.06)', yAxisID: 'y1' }
+                    { ...base, label: 'Humidity (%)',      data: hums,  borderColor: '#3b82c4', backgroundColor: 'rgba(59,130,196,0.06)', yAxisID: 'y1' },
+                    {
+                        // Yellow fill between 70% line and data (only where data > 70)
+                        label: 'Humidity 70-80%',
+                        data: zone70,
+                        borderColor: 'rgba(255,180,0,0.4)',
+                        borderWidth: 1,
+                        borderDash: [4, 3],
+                        backgroundColor: 'transparent',
+                        fill: { target: { value: 70 }, above: 'rgba(255,210,0,0.25)', below: 'transparent' },
+                        pointRadius: 0,
+                        spanGaps: true,
+                        yAxisID: 'y1',
+                        tension: 0.35,
+                        clip: { top: false, bottom: false, left: false, right: false },
+                    },
+                    {
+                        // Dark fill above 80% line
+                        label: 'Humidity >80%',
+                        data: zone80,
+                        borderColor: 'rgba(20,20,20,0.45)',
+                        borderWidth: 1,
+                        borderDash: [4, 3],
+                        backgroundColor: 'transparent',
+                        fill: { target: { value: 80 }, above: 'rgba(20,20,20,0.3)', below: 'transparent' },
+                        pointRadius: 0,
+                        spanGaps: true,
+                        yAxisID: 'y1',
+                        tension: 0.35,
+                    }
                 ]
             },
             options: {
@@ -526,8 +653,8 @@
                         max: xMax,
                         time: {
                             unit: 'minute',
-                            stepSize: 10,
-                            displayFormats: { minute: 'HH:mm' }
+                            stepSize: show7d ? 720 : (show24h ? 60 : 10),
+                            displayFormats: { minute: 'HH:mm', hour: 'HH:mm' }
                         },
                         grid: { color: '#f0f0ec' },
                         border: { display: false },
@@ -581,8 +708,9 @@
             document.getElementById('latest-hum').innerText  = `${latest.humidity.toFixed(1)}%`;
             updateStatus(latest.timestamp);
 
-            // Fetch 2 hours so "most recent" mode has data to show even after an outage
-            const histRes = await fetch(`${API_BASE}/readings/history?hours=2`);
+            // Fetch appropriate window based on active mode
+            const hoursToFetch = show7d ? 168 : (show24h ? 24 : 2);
+            const histRes = await fetch(`${API_BASE}/readings/history?hours=${hoursToFetch}`);
             cachedHistory = await histRes.json();
 
             updateChart();
@@ -645,10 +773,18 @@
         }
     }
 
-    // Press 'd' to reveal/hide the debug button
+    // Press 'd' to reveal/hide the debug buttons (show most recent + 7d)
     document.addEventListener('keydown', e => {
         if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey) {
             btnWindow.classList.toggle('visible');
+            const show = btn7d.style.display === 'none';
+            btn7d.style.display = show ? 'inline-block' : 'none';
+            if (!show && show7d) {
+                show7d = false;
+                btn7d.classList.remove('active');
+                document.getElementById('chart-title').innerText = show24h ? 'Last 24 hours' : 'Last 60 minutes';
+                update();
+            }
         }
     });
 
