@@ -237,7 +237,7 @@
         }
         .btn-reset:hover { background: var(--temp); color: var(--surface); }
 
-        .chart-wrap { position: relative; height: 280px; }
+        .chart-wrap { position: relative; height: 300px; }
         .no-data {
             position: absolute; inset: 0; display: none; align-items: center;
             justify-content: center; font-family: 'DM Mono', monospace;
@@ -369,6 +369,71 @@
     let show24h = false;
     let show7d = false;
 
+    // ── Dynamic Time Scale ──
+    const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+    const THREE_MINS_MS = 3 * 60 * 1000;
+
+    function isToday(ms) {
+        return new Date(ms).toDateString() === new Date().toDateString();
+    }
+
+    // minUnit controls tick density; displayFormats are overridden by the tick callback below
+    function getTimeScaleOptions(xMin, xMax) {
+        const spanMs = xMax - xMin;
+        if (spanMs > TWO_DAYS_MS) {
+            return { minUnit: 'hour',   displayFormats: { hour: 'HH:mm', day: 'EEE' } };
+        }
+        return { minUnit: 'minute', displayFormats: { minute: 'HH:mm', hour: 'HH:mm', day: 'EEE' } };
+    }
+
+    function applyTimeScale(chart, xMin, xMax) {
+        const opts = getTimeScaleOptions(xMin, xMax);
+        chart.options.scales.x.time.minUnit = opts.minUnit;
+        chart.options.scales.x.time.displayFormats = opts.displayFormats;
+    }
+
+    function formatEndpointLabel(ms, isRight) {
+        if (isRight && (Date.now() - ms) < THREE_MINS_MS) return 'Now';
+        const d = new Date(ms);
+        const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        if (isToday(ms)) return time;
+        const day = d.toLocaleDateString('en-GB', { weekday: 'short' });
+        return `${day} ${time}`;
+    }
+
+    // ── Endpoint Label Plugin ──
+    const endpointLabelPlugin = {
+        id: 'endpointLabels',
+        afterDraw(chart) {
+            const xScale = chart.scales.x;
+            if (!xScale) return;
+
+            const ctx = chart.ctx;
+            const yPos = xScale.bottom + 14;
+            const chartLeft  = xScale.left;
+            const chartRight = xScale.right;
+            const xMin = xScale.min;
+            const xMax = xScale.max;
+
+            ctx.save();
+            ctx.font = '500 10px "DM Mono", monospace';
+            ctx.fillStyle = '#888880';
+            ctx.textBaseline = 'top';
+
+            const leftLabel = formatEndpointLabel(xMin, false);
+            ctx.textAlign = 'left';
+            ctx.fillText(leftLabel, chartLeft, yPos);
+
+            const rightLabel = formatEndpointLabel(xMax, true);
+            ctx.textAlign = 'right';
+            ctx.fillText(rightLabel, chartRight, yPos);
+
+            ctx.restore();
+        }
+    };
+
+    Chart.register(endpointLabelPlugin);
+
     // ── Smart Fetching Logic ──
     async function fetchHistoricalData(hoursToFetch) {
         let url = `${API_BASE}/readings/history?hours=${hoursToFetch}`;
@@ -438,11 +503,14 @@
             if (!isUserExploring) {
                 chart.options.scales.x.min = xMin;
                 chart.options.scales.x.max = xMax;
+                applyTimeScale(chart, xMin, xMax);
             }
             
             chart.update('none');
             return;
         }
+
+        const initialTimeOpts = getTimeScaleOptions(xMin, xMax);
 
         chart = new Chart(ctx, {
             type: 'line',
@@ -475,7 +543,11 @@
                             onPanStart: () => {
                                 isUserExploring = true;
                                 document.getElementById('btn-reset-zoom').style.display = 'inline-block';
-                            } 
+                            },
+                            onPan: ({ chart: c }) => {
+                                const { min, max } = c.scales.x;
+                                applyTimeScale(c, min, max);
+                            }
                         },
                         zoom: { 
                             wheel: { enabled: true, speed: 0.12 }, 
@@ -484,6 +556,10 @@
                                 isUserExploring = true;
                                 document.getElementById('btn-reset-zoom').style.display = 'inline-block';
                                 return true;
+                            },
+                            onZoom: ({ chart: c }) => {
+                                const { min, max } = c.scales.x;
+                                applyTimeScale(c, min, max);
                             }
                         }
                     },
@@ -505,9 +581,19 @@
                 scales: {
                     x: {
                         type: 'time', min: xMin, max: xMax,
-                        time: { minUnit: 'minute', displayFormats: { minute: 'HH:mm', hour: 'HH:mm', day: 'MMM d' } },
+                        time: initialTimeOpts,
                         grid: { color: '#f0f0ec' }, border: { display: false },
-                        ticks: { color: '#888880', font: { family: 'DM Mono', size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+                        ticks: {
+                            color: '#888880', font: { family: 'DM Mono', size: 10 },
+                            maxRotation: 0, autoSkip: true, maxTicksLimit: 6,
+                            callback: function(value) {
+                                const d = new Date(value);
+                                const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                                if (isToday(value)) return time;
+                                const day = d.toLocaleDateString('en-GB', { weekday: 'short' });
+                                return `${day} ${time}`;
+                            }
+                        }
                     },
                     y: {
                         position: 'left', grid: { color: '#f0f0ec' }, border: { display: false },
